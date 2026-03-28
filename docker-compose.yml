@@ -1,0 +1,57 @@
+version: '3.9'
+
+services:
+  postgres:
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    container_name: track-ur-shows-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: track-ur-shows-app
+    ports:
+      - "3000:3000"
+    environment:
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      TMDB_API_KEY: ${TMDB_API_KEY}
+      NODE_ENV: ${NODE_ENV}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_network
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+volumes:
+  db_data:
+
+networks:
+  app_network:
+    driver: bridge

@@ -1,0 +1,30 @@
+{
+  "name": "track-ur-shows",
+  "version": "1.0.0",
+  "description": "A full-stack web application for tracking and rating movies and TV series",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:migrate": "psql -U $DB_USER -h $DB_HOST -d $DB_NAME -f db/schema.sql",
+    "db:seed": "psql -U $DB_USER -h $DB_HOST -d $DB_NAME -f db/seed.sql"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "pg": "^8.11.0",
+    "bcrypt": "^5.1.0",
+    "jsonwebtoken": "^9.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/bcrypt": "^5.0.0",
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^14.0.0"
+  }
+}
