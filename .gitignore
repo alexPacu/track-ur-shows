@@ -19,3 +19,14 @@ yarn-error.log*
 .vercel/
 coverage/
 STRUCTURE.md
+TMDB_API_Documentation.md
+
+# database files & backups 
+*.sql.backup
+*.sql.dump
+**/postgres/data/
+.pgpass
+pgadmin.db
+
+# database documentation 
+DATABASE_SCHEMA.md
