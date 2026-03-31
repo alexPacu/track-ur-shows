@@ -1,4 +1,4 @@
-import { query, queryOne, queryMany } from '@/lib/db';
+import { queryOne, queryMany } from '@/lib/db';
 
 export type RecommendationType = 'simple' | 'conversational' | 'discussion' | 'mood-based';
 export type UserFeedback = 'liked' | 'disliked' | 'neutral' | null;

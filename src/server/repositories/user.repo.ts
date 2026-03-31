@@ -1,4 +1,4 @@
-import { query, queryOne, queryMany } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 
 export interface User {
   id: number;

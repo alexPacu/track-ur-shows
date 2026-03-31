@@ -18,8 +18,7 @@ yarn-error.log*
 .turbo/
 .vercel/
 coverage/
-STRUCTURE.md
-TMDB_API_Documentation.md
+
 
 # database files & backups 
 *.sql.backup
@@ -28,5 +27,5 @@ TMDB_API_Documentation.md
 .pgpass
 pgadmin.db
 
-# database documentation 
-DATABASE_SCHEMA.md
+# markdowns for documentation
+markdown/
