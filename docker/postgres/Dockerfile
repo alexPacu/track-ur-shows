@@ -7,7 +7,7 @@ ENV POSTGRES_DB=${POSTGRES_DB:-track_ur_shows}
 
 # initialization scripts
 COPY ../../db/schema.sql /docker-entrypoint-initdb.d/01-schema.sql
-COPY ../../db/seed.sql /docker-entrypoint-initdb.d/02-seed.sql
+# COPY ../../db/seed.sql /docker-entrypoint-initdb.d/02-seed.sql     # test data
 
 # postgreSQL port
 EXPOSE 5432
