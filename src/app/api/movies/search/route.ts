@@ -39,8 +39,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // search movies
-    const results = await MovieService.searchMovies(query, { page });
+    // search movies or TV shows based on type
+    const results = type === 'tv' 
+      ? await MovieService.searchShows(query, { page })
+      : await MovieService.searchMovies(query, { page });
 
     return NextResponse.json(
       {
