@@ -1,1 +1,3 @@
-// TODO: Implement
+export function MovieCard() {
+  return null;
+}

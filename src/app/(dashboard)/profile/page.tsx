@@ -7,6 +7,12 @@ export default function ProfilePage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const profileStats = [
+    { label: 'Total Content', value: '—', color: 'text-accent-blue' },
+    { label: 'Episodes Watched', value: '—', color: 'text-blue-400' },
+    { label: 'Days Watched', value: '—', color: 'text-green-400' },
+    { label: 'Mean Score', value: '—', color: 'text-yellow-400' },
+  ];
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -43,45 +49,61 @@ export default function ProfilePage() {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg-dark">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-accent-blue/30 border-t-accent-blue rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-text-primary">Loading profile...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
-    return <div>User not found</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg-dark">
+        <p className="text-text-primary">User not found</p>
+      </div>
+    );
   }
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
-      <h1>My Profile</h1>
-      <div style={{ border: '1px solid #ddd', padding: '20px', borderRadius: '4px', marginBottom: '20px' }}>
-        <p>
-          <strong>Email:</strong> {user.email}
-        </p>
-        <p>
-          <strong>Username:</strong> {user.username}
-        </p>
-        <p>
-          <strong>Member since:</strong> {new Date(user.created_at).toLocaleDateString()}
-        </p>
-        {user.bio && (
-          <p>
-            <strong>Bio:</strong> {user.bio}
-          </p>
-        )}
+    <div className="min-h-screen pb-20">
+      <div className="max-w-7xl mx-auto px-6 py-14">
+        <div className="relative overflow-hidden rounded-2xl border border-accent-blue/25 shadow-[0_10px_28px_rgba(0,0,0,0.35)]">
+          <div className="h-48 bg-gradient-to-r from-accent-blue/30 to-bg-dark"></div>
+
+          <div className="px-8 pb-8 -mt-10">
+            <div className="flex items-start justify-between gap-8">
+              <div className="flex items-center gap-5">
+                <div className="h-24 w-24 rounded-full bg-accent-blue/20 border-4 border-bg-dark flex items-center justify-center text-4xl font-bold text-accent-blue">
+                  {user.username?.[0]?.toUpperCase() || 'U'}
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold text-text-primary">{user.username}</h1>
+                  <p className="text-text-muted mt-2">Member since {new Date().getFullYear()}</p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                className="mt-10 px-6 py-2 bg-red-600/20 text-red-400 border border-red-600/50 rounded-lg hover:bg-red-600/30 transition"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-10 grid grid-cols-4 gap-6">
+          {profileStats.map((stat) => (
+            <div key={stat.label} className="modern-panel rounded-xl p-6 text-center">
+              <p className={`text-4xl font-bold ${stat.color}`}>{stat.value}</p>
+              <p className="text-text-muted text-sm mt-2">{stat.label}</p>
+            </div>
+          ))}
+        </div>
       </div>
-      <button
-        onClick={handleLogout}
-        style={{
-          padding: '10px 20px',
-          backgroundColor: '#d9534f',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-      >
-        Logout
-      </button>
     </div>
   );
 }

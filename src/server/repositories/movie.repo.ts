@@ -43,7 +43,7 @@ export interface Episode {
 export class ShowRepository {
   static async findOrCreateByTmdbId(
     tmdbId: number,
-    data: Omit<Show, 'id' | 'created_at' | 'updated_at'>
+    data: Omit<Show, 'id' | 'tmdb_id' | 'created_at' | 'updated_at'>
   ): Promise<Show> {
     const existing = await queryOne<Show>(
       `SELECT * FROM shows WHERE tmdb_id = $1`,

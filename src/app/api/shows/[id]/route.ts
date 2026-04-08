@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MovieService } from '@/server/services/movie.service';
-import { extractUserFromRequest } from '@/server/middlewares/auth.middleware';
 
 /**
- * GET /api/movies/[id]
- * Get movie details
+ * GET /api/shows/[id]
+ * Get TV show details
  * 
  * Path params:
- * - id: TMDB movie ID
+ * - id: TMDB TV show ID
  */
 export async function GET(
   req: NextRequest,
@@ -15,36 +14,36 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const movieId = parseInt(id);
+    const showId = parseInt(id);
 
     // validation
-    if (isNaN(movieId) || movieId < 1) {
+    if (isNaN(showId) || showId < 1) {
       return NextResponse.json(
-        { error: 'Invalid movie ID' },
+        { error: 'Invalid TV show ID' },
         { status: 400 }
       );
     }
 
-    // get movie details
-    const movieDetails = await MovieService.getMovieDetails(movieId);
+    // get TV show details
+    const showDetails = await MovieService.getShowDetails(showId);
 
     return NextResponse.json(
       {
         success: true,
-        data: movieDetails,
+        data: showDetails,
       },
       { status: 200 }
     );
   } catch (error) {
-    console.error('Get movie details error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to get movie details';
+    console.error('Get TV show details error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to get TV show details';
 
-    // check if it's a 404 (movie not found)
-    if (message.includes('6')) {
+    // check if it's a 404 (show not found)
+    if (message.includes('34')) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Movie not found',
+          error: 'TV show not found',
         },
         { status: 404 }
       );

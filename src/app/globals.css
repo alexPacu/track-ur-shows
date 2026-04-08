@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-dark: #1a1a1a;
+  --color-bg-deep: #111827;
+  --color-bg-card: #242424;
+  --color-bg-soft: #1f2937;
+  --color-accent-blue: #89CFF0;
+  --color-accent-blue-strong: #60a5fa;
+  --color-text-primary: #f5f5f5;
+  --color-text-muted: #b0b0b0;
+  --color-input-bg: #2a2a2a;
+  --color-input-border: #3a3a3a;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(circle at 10% 10%, rgb(137 207 240 / 10%) 0%, transparent 42%),
+    radial-gradient(circle at 85% 15%, rgb(96 165 250 / 10%) 0%, transparent 35%),
+    linear-gradient(180deg, rgb(17 24 39) 0%, rgb(26 26 26) 35%, rgb(26 26 26) 100%);
+  color: rgb(245 245 245);
+  font-family: system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+
+input, textarea, select {
+  background-color: rgb(42 42 42);
+  border-color: rgb(58 58 58);
+  color: rgb(245 245 245);
+}
+
+input::placeholder, textarea::placeholder {
+  color: rgb(176 176 176);
+}
+
+a {
+  transition-property: color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+button {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(137 207 240);
+  outline-offset: 2px;
+}
+
+.glass-card {
+  background-color: rgb(36 36 36 / 72%);
+  border: 1px solid rgb(137 207 240 / 20%);
+  backdrop-filter: blur(12px);
+}
+
+.modern-panel {
+  background: linear-gradient(160deg, rgb(36 36 36 / 90%) 0%, rgb(31 41 55 / 80%) 100%);
+  border: 1px solid rgb(137 207 240 / 25%);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 35%);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: rgb(10 10 10);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgb(137 207 240);
+  border-radius: 12px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(96, 165, 250);
+}

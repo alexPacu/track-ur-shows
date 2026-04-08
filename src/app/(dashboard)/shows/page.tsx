@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function MoviesIndexPage() {
+export default function ShowsIndexPage() {
   const router = useRouter();
 
   useEffect(() => {
@@ -13,14 +13,6 @@ export default function MoviesIndexPage() {
   return (
     <div className="min-h-[40vh] flex items-center justify-center">
       <p className="text-text-muted">Redirecting to dashboard...</p>
-    </div>
-  );
-}
-export default function MoviesPage() {
-  return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
-      <h1>Movies & Shows</h1>
-      <p>Browse and manage your watchlist</p>
     </div>
   );
 }

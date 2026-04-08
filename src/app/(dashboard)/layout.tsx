@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Navbar } from '@/components/Navbar';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -18,25 +19,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         if (response.ok) {  // user is authenticated
           setIsAuthenticated(true);
-          setLoading(false);
         } else if (response.status === 401) { // not loged in -> back to login page
           router.push('/login');
         }
       } catch (error) {
-        router.push('/login');    // error while auth -> back to login page
+        router.push('/login');
+      } finally {
+        setLoading(false);
       }
     };
 
     checkAuth();
-  }, [router]);
+  }, []);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg-dark">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-accent-blue/30 border-t-accent-blue rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-text-primary">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!isAuthenticated) {
     return null;
   }
 
-  return <>{children}</>;
+  return (
+    <div className="min-h-screen flex flex-col bg-bg-dark">
+      <Navbar />
+      <main className="flex-1 pt-4">{children}</main>
+    </div>
+  );
 }
