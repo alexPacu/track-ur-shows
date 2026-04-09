@@ -50,7 +50,7 @@ export default function WatchlistPage() {
 
   return (
     <div className="min-h-screen pb-20">
-      <div className="max-w-7xl mx-auto px-6 py-16">
+      <div className="max-w-[1480px] mx-auto px-10 py-16">
         <h1 className="text-4xl font-bold text-text-primary mb-2">My Watchlist</h1>
         <p className="text-text-muted">Keep track of shows and movies you want to watch</p>
 
@@ -75,7 +75,7 @@ export default function WatchlistPage() {
       </div>
 
       <div className="border-y border-accent-blue/20 bg-bg-card/20">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-[1480px] mx-auto px-10">
           <div className="flex gap-8 overflow-x-auto">
             {tabs.map((tab) => (
               <button
@@ -99,7 +99,7 @@ export default function WatchlistPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-12">
+      <div className="max-w-[1480px] mx-auto px-10 py-12">
         {watchlist.length === 0 ? (
           <div className="modern-panel rounded-xl py-16 px-6 text-center">
             <p className="text-text-muted text-lg">No items in your watchlist yet</p>
