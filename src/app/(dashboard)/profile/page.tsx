@@ -42,6 +42,7 @@ export default function ProfilePage() {
         method: 'POST',
         credentials: 'include',
       });
+      sessionStorage.removeItem('authed');
       router.push('/');
     } catch (error) {
       console.error('Logout failed', error);
