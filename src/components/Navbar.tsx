@@ -9,7 +9,7 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-accent-blue/20 bg-bg-dark/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
+      <div className="mx-auto flex h-20 max-w-[1480px] items-center justify-between px-10">
         <Link href="/dashboard" className="flex items-center hover:opacity-85 transition">
           <span className="text-2xl font-bold tracking-tight text-text-primary">TrackUrShows</span>
         </Link>

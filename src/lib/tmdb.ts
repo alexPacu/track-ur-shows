@@ -199,6 +199,58 @@ class TMDBClient {
     });
   }
 
+  async getTopRatedTV(
+    options: {
+      page?: number;
+      language?: string;
+    } = {}
+  ): Promise<TMDBSearchResult> {
+    return this.request<TMDBSearchResult>('/tv/top_rated', {
+      page: options.page || 1,
+      language: options.language || 'en-US',
+    });
+  }
+
+  async discoverMovies(
+    options: {
+      page?: number;
+      language?: string;
+      with_genres?: string;
+      with_watch_providers?: string;
+      watch_region?: string;
+      sort_by?: string;
+    } = {}
+  ): Promise<TMDBSearchResult> {
+    return this.request<TMDBSearchResult>('/discover/movie', {
+      page: options.page || 1,
+      language: options.language || 'en-US',
+      with_genres: options.with_genres,
+      with_watch_providers: options.with_watch_providers,
+      watch_region: options.watch_region || 'US',
+      sort_by: options.sort_by || 'popularity.desc',
+    });
+  }
+
+  async discoverTV(
+    options: {
+      page?: number;
+      language?: string;
+      with_genres?: string;
+      with_watch_providers?: string;
+      watch_region?: string;
+      sort_by?: string;
+    } = {}
+  ): Promise<TMDBSearchResult> {
+    return this.request<TMDBSearchResult>('/discover/tv', {
+      page: options.page || 1,
+      language: options.language || 'en-US',
+      with_genres: options.with_genres,
+      with_watch_providers: options.with_watch_providers,
+      watch_region: options.watch_region || 'US',
+      sort_by: options.sort_by || 'popularity.desc',
+    });
+  }
+
   async findByExternalId(
     externalId: string,
     externalSource:

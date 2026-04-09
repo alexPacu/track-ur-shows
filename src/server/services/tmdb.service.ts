@@ -187,4 +187,71 @@ export class TMDBService {
       throw error;
     }
   }
+
+  static async getTopRatedShows(options: { page?: number } = {}) {
+    try {
+      const result = (await this.client.getTopRatedTV({
+        page: options.page || 1,
+      })) as any;
+
+      return {
+        ...result,
+        results: result.results.map((item: any) => ({
+          ...item,
+          media_type: 'tv',
+          poster_url: buildImageUrl(item.poster_path, 'w342'),
+          backdrop_url: buildImageUrl(item.backdrop_path, 'w780'),
+        })),
+      };
+    } catch (error) {
+      console.error('TMDBService.getTopRatedShows error:', error);
+      throw error;
+    }
+  }
+
+  static async discoverMovies(options: { with_genres?: string; with_watch_providers?: string; page?: number } = {}) {
+    try {
+      const result = (await this.client.discoverMovies({
+        page: options.page || 1,
+        with_genres: options.with_genres,
+        with_watch_providers: options.with_watch_providers,
+      })) as any;
+
+      return {
+        ...result,
+        results: result.results.map((item: any) => ({
+          ...item,
+          media_type: 'movie',
+          poster_url: buildImageUrl(item.poster_path, 'w342'),
+          backdrop_url: buildImageUrl(item.backdrop_path, 'w780'),
+        })),
+      };
+    } catch (error) {
+      console.error('TMDBService.discoverMovies error:', error);
+      throw error;
+    }
+  }
+
+  static async discoverTV(options: { with_genres?: string; with_watch_providers?: string; page?: number } = {}) {
+    try {
+      const result = (await this.client.discoverTV({
+        page: options.page || 1,
+        with_genres: options.with_genres,
+        with_watch_providers: options.with_watch_providers,
+      })) as any;
+
+      return {
+        ...result,
+        results: result.results.map((item: any) => ({
+          ...item,
+          media_type: 'tv',
+          poster_url: buildImageUrl(item.poster_path, 'w342'),
+          backdrop_url: buildImageUrl(item.backdrop_path, 'w780'),
+        })),
+      };
+    } catch (error) {
+      console.error('TMDBService.discoverTV error:', error);
+      throw error;
+    }
+  }
 }

@@ -42,6 +42,7 @@ export default function ProfilePage() {
         method: 'POST',
         credentials: 'include',
       });
+      sessionStorage.removeItem('authed');
       router.push('/');
     } catch (error) {
       console.error('Logout failed', error);
@@ -69,7 +70,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen pb-20">
-      <div className="max-w-7xl mx-auto px-6 py-14">
+      <div className="max-w-[1480px] mx-auto px-10 py-14">
         <div className="relative overflow-hidden rounded-2xl border border-accent-blue/25 shadow-[0_10px_28px_rgba(0,0,0,0.35)]">
           <div className="h-48 bg-gradient-to-r from-accent-blue/30 to-bg-dark"></div>
 

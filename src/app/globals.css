@@ -13,14 +13,19 @@
   --color-input-border: #3a3a3a;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@layer base {
+  *,
+  *::before,
+  *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 }
 
 html {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -33,31 +38,33 @@ body {
   min-height: 100vh;
 }
 
-input, textarea, select {
-  background-color: rgb(42 42 42);
-  border-color: rgb(58 58 58);
-  color: rgb(245 245 245);
-}
+@layer base {
+  input, textarea, select {
+    background-color: rgb(42 42 42);
+    border-color: rgb(58 58 58);
+    color: rgb(245 245 245);
+  }
 
-input::placeholder, textarea::placeholder {
-  color: rgb(176 176 176);
-}
+  input::placeholder, textarea::placeholder {
+    color: rgb(176 176 176);
+  }
 
-a {
-  transition-property: color;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
-}
+  a {
+    transition-property: color;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
 
-button {
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
-}
+  button {
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
 
-:focus-visible {
-  outline: 2px solid rgb(137 207 240);
-  outline-offset: 2px;
+  :focus-visible {
+    outline: 2px solid rgb(137 207 240);
+    outline-offset: 2px;
+  }
 }
 
 .glass-card {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/Navbar';
 
@@ -9,20 +9,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  useLayoutEffect(() => {
+    if (sessionStorage.getItem('authed') === '1') {
+      setIsAuthenticated(true);
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const checkAuth = async () => {   // check if user is authenticated
+    const checkAuth = async () => {
       try {
         const response = await fetch('/api/auth/me', {
           method: 'GET',
           credentials: 'include',
         });
 
-        if (response.ok) {  // user is authenticated
+        if (response.ok) {
           setIsAuthenticated(true);
-        } else if (response.status === 401) { // not loged in -> back to login page
+          setLoading(false);
+          sessionStorage.setItem('authed', '1');
+        } else if (response.status === 401) {
+          sessionStorage.removeItem('authed');
           router.push('/login');
         }
       } catch (error) {
+        sessionStorage.removeItem('authed');
         router.push('/login');
       } finally {
         setLoading(false);
