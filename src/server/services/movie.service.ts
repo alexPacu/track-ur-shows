@@ -86,13 +86,7 @@ export class MovieService {
    */
   static async getMovieDetails(tmdbId: number) {
     try {
-      const cachedMovie = await ShowRepository.findByTmdbId(tmdbId);
-      if (cachedMovie) {
-        console.log(`Movie ${tmdbId} found in cache - returning from DB`);
-        return cachedMovie;
-      }
-
-      console.log(`Movie ${tmdbId} not in cache - calling TMDB API`);
+      // always fetch from TMDB for detail pages (need credits, videos, full genres)
       const movieDetails = await TMDBService.getMovieDetails(tmdbId);
 
       const genres = movieDetails.genres?.map((g: any) => g.id) || [];
@@ -194,13 +188,6 @@ export class MovieService {
    */
   static async getShowDetails(showId: number) {
     try {
-      const cachedShow = await ShowRepository.findByTmdbId(showId);
-      if (cachedShow) {
-        console.log(`TV Show ${showId} found in cache - returning from DB`);
-        return cachedShow;
-      }
-
-      console.log(`TV Show ${showId} not in cache - calling TMDB API`);
       const showDetails = await TMDBService.getTVShowDetails(showId);
 
       const genres = showDetails.genres?.map((g: any) => g.id) || [];

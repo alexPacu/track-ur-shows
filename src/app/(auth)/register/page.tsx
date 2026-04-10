@@ -39,18 +39,18 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-14">
-      <div className="w-full max-w-xl modern-panel rounded-2xl p-9">
-        <h1 className="mb-2 text-center text-3xl font-bold text-text-primary">Create Account</h1>
-        <p className="mb-9 text-center text-lg text-text-muted">Join and build your personalized media watchlist.</p>
+    <div className="min-h-screen flex items-center justify-center px-4 py-8">
+      <div className="w-full max-w-md modern-panel rounded-2xl p-7">
+        <h1 className="mb-1 text-center text-2xl font-bold text-text-primary">Create Account</h1>
+        <p className="mb-6 text-center text-sm text-text-muted">Join and build your personalized media watchlist.</p>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg">
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="email" className="block text-text-primary text-sm font-semibold mb-2">
               Email
@@ -114,13 +114,13 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-6 w-full rounded-lg bg-accent-blue py-3 font-semibold text-bg-dark shadow-[0_8px_20px_rgba(137,207,240,0.2)] hover:-translate-y-0.5 hover:bg-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-2 w-full rounded-lg bg-accent-blue py-2.5 font-semibold text-bg-dark shadow-[0_8px_20px_rgba(137,207,240,0.2)] hover:-translate-y-0.5 hover:bg-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? 'Creating account...' : 'Register'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-text-muted">
+        <p className="mt-4 text-center text-text-muted text-sm">
           Already have an account?{' '}
           <Link href="/login" className="text-accent-blue hover:text-blue-400 transition font-semibold">
             Login here
