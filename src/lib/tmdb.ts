@@ -211,6 +211,16 @@ class TMDBClient {
     });
   }
 
+  async getTVSeasonDetails(
+    seriesId: number,
+    seasonNumber: number,
+    options: { language?: string } = {}
+  ) {
+    return this.request(`/tv/${seriesId}/season/${seasonNumber}`, {
+      language: options.language || 'en-US',
+    });
+  }
+
   async discoverMovies(
     options: {
       page?: number;

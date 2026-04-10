@@ -87,6 +87,22 @@ export class TMDBService {
     }
   }
 
+  static async getTVSeasonDetails(seriesId: number, seasonNumber: number) {
+    try {
+      const result = (await this.client.getTVSeasonDetails(seriesId, seasonNumber)) as any;
+      return {
+        ...result,
+        episodes: (result.episodes || []).map((ep: any) => ({
+          ...ep,
+          still_url: buildImageUrl(ep.still_path, 'w300'),
+        })),
+      };
+    } catch (error) {
+      console.error('TMDBService.getTVSeasonDetails error:', error);
+      throw error;
+    }
+  }
+
   static async getTrendingMovies(timeWindow: 'day' | 'week' = 'day') {
     try {
       const result = (await this.client.getTrendingMovies(timeWindow)) as any;
