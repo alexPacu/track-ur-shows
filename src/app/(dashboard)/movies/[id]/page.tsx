@@ -32,6 +32,7 @@ export default function MovieDetailPage() {
   const id = params.id as string;
   const [movie, setMovie] = useState<MovieDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [playerOpen, setPlayerOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -148,7 +149,10 @@ export default function MovieDetailPage() {
             )}
 
             <div className="flex gap-3">
-              <button className="flex items-center gap-2.5 px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-white/85 transition-colors text-sm">
+              <button
+                onClick={() => setPlayerOpen(true)}
+                className="flex items-center gap-2.5 px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-white/85 transition-colors text-sm"
+              >
                 <span>▶</span> Play
               </button>
               <button className="flex items-center justify-center w-11 h-11 rounded-full border-2 border-white/60 text-white hover:border-accent-blue hover:text-accent-blue transition-colors">
@@ -158,6 +162,27 @@ export default function MovieDetailPage() {
           </div>
         </div>
       </section>
+
+      {/* fullscreen player overlay */}
+      {playerOpen && (
+        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+          <button
+            onClick={() => setPlayerOpen(false)}
+            className="absolute top-5 right-5 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors text-xl"
+          >
+            ✕
+          </button>
+          <iframe
+            src={`https://vidsrc.cc/v2/embed/movie/${id}`}
+            width="100%"
+            height="100%"
+            allowFullScreen
+            allow="autoplay; fullscreen"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+            className="w-full h-full border-0"
+          />
+        </div>
+      )}
 
       <div className="max-w-[1480px] mx-auto px-10 mt-10 space-y-14">
         {movie.overview && (

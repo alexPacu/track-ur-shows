@@ -114,12 +114,21 @@ export class MovieService {
     }
   }
 
+  // maps db records so `id` is the tmdb id (frontend expects tmdb ids for linking and embedding)
+  private static normalizeCached(records: any[]) {
+    return records.map((r) => ({
+      ...r,
+      id: r.tmdb_id,
+      db_id: r.id,
+    }));
+  }
+
   static async getPopularMovies(options: { page?: number } = {}) {
     try {
       const cached = await ShowRepository.getByMediaType('movie', 20, 0);
       if (cached.length > 0) {
         console.log(`Retrieved ${cached.length} popular movies from cache`);
-        return { results: cached, from_cache: true };
+        return { results: this.normalizeCached(cached), from_cache: true };
       }
 
       const results = await TMDBService.getPopularMovies({
@@ -249,7 +258,7 @@ export class MovieService {
       const cached = await ShowRepository.getByMediaType('tv', 20, 0);
       if (cached.length > 0) {
         console.log(`Retrieved ${cached.length} popular TV shows from cache`);
-        return { results: cached, from_cache: true };
+        return { results: this.normalizeCached(cached), from_cache: true };
       }
 
       const results = await TMDBService.getPopularTV({

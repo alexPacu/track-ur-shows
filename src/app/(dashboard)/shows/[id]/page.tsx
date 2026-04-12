@@ -53,6 +53,9 @@ export default function ShowDetailPage() {
   const [episodesLoading, setEpisodesLoading] = useState(false);
   const [episodeCache, setEpisodeCache] = useState<Record<number, Episode[]>>({});
 
+  // tracks which episode is currently playing
+  const [playingEpisode, setPlayingEpisode] = useState<{ season: number; episode: number } | null>(null);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -238,6 +241,11 @@ export default function ShowDetailPage() {
                 {episodes.map((ep) => (
                   <div
                     key={ep.id}
+                    onClick={() => setPlayingEpisode(
+                      playingEpisode?.season === selectedSeason && playingEpisode?.episode === ep.episode_number
+                        ? null
+                        : { season: selectedSeason, episode: ep.episode_number }
+                    )}
                     className="flex gap-4 p-4 rounded-xl bg-bg-card/60 border border-accent-blue/10 hover:border-accent-blue/30 transition-colors group cursor-pointer"
                   >
                     <div className="flex-shrink-0 w-[185px] h-[104px] rounded-lg overflow-hidden bg-bg-dark relative">
@@ -321,6 +329,27 @@ export default function ShowDetailPage() {
           </section>
         )}
       </div>
+
+      {/* fullscreen player overlay */}
+      {playingEpisode && (
+        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+          <button
+            onClick={() => setPlayingEpisode(null)}
+            className="absolute top-5 right-5 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors text-xl"
+          >
+            ✕
+          </button>
+          <iframe
+            src={`https://vidsrc.cc/v2/embed/tv/${id}/${playingEpisode.season}/${playingEpisode.episode}`}
+            width="100%"
+            height="100%"
+            allowFullScreen
+            allow="autoplay; fullscreen"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+            className="w-full h-full border-0"
+          />
+        </div>
+      )}
     </div>
   );
 }
