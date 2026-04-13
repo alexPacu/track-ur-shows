@@ -16,6 +16,85 @@ interface MediaItem {
   first_air_date?: string;
 }
 
+interface ContinueWatchingItem {
+  tmdb_id: number;
+  media_type: 'movie' | 'tv';
+  season: number;
+  episode: number;
+  progress_seconds: number;
+  duration_seconds: number;
+  progress_percent: number | string;
+  title: string | null;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  last_watched_at: string;
+}
+
+function buildTmdbImage(path: string | null, size: string = 'w780') {
+  if (!path) return null;
+  return `https://image.tmdb.org/t/p/${size}${path}`;
+}
+
+function ContinueWatchingCard({ item }: { item: ContinueWatchingItem }) {
+  const basePath = item.media_type === 'tv' ? 'shows' : 'movies';
+  const href = `/dashboard/${basePath}/${item.tmdb_id}`;
+
+  const imageUrl =
+    buildTmdbImage(item.backdrop_path, 'w780') ?? buildTmdbImage(item.poster_path, 'w500');
+
+  const rawPct = Number(item.progress_percent) || 0;
+  const derivedPct =
+    rawPct > 0
+      ? rawPct
+      : item.duration_seconds > 0
+      ? (item.progress_seconds / item.duration_seconds) * 100
+      : 0;
+  const percent = Math.max(0, Math.min(100, derivedPct));
+  const label = item.media_type === 'tv' ? `S${item.season} · E${item.episode}` : 'Movie';
+
+  return (
+    <Link href={href} className="group/card flex-shrink-0 w-[320px]">
+      <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-accent-blue/20 hover:border-accent-blue/50 transition-all duration-300 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+        {imageUrl ? (
+          <Image
+            src={imageUrl}
+            alt={item.title ?? 'Continue watching'}
+            fill
+            className="object-cover transition-transform duration-500 group-hover/card:scale-105"
+            sizes="320px"
+          />
+        ) : (
+          <div className="w-full h-full bg-bg-card" />
+        )}
+
+        <div className="absolute inset-0 bg-gradient-to-t from-bg-dark/95 via-bg-dark/30 to-transparent" />
+
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity">
+          <span className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center text-black text-xl shadow-lg">
+            ▶
+          </span>
+        </div>
+
+        <div className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded text-[10px] font-bold text-text-muted/90 uppercase tracking-wider bg-black/30">
+          {label}
+        </div>
+
+        <div className="absolute bottom-0 left-0 right-0 p-4">
+          <p className="text-text-primary font-semibold text-base leading-tight truncate group-hover/card:text-accent-blue transition-colors">
+            {item.title ?? 'Untitled'}
+          </p>
+          <div className="mt-2 h-1 w-full rounded-full bg-white/15 overflow-hidden">
+            <div
+              className="h-full bg-accent-blue transition-all"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 function getTitle(item: MediaItem) {
   return item.title || item.name || 'Untitled';
 }
@@ -239,6 +318,8 @@ export default function HomePage() {
   const [topRatedMovies, setTopRatedMovies] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>([]);
+
   const [trendingTab, setTrendingTab] = useState<'movie' | 'tv'>('movie');
   const [top10Tab, setTop10Tab] = useState<'movie' | 'tv'>('movie');
   const [topRatedTab, setTopRatedTab] = useState<'movie' | 'tv'>('movie');
@@ -256,15 +337,17 @@ export default function HomePage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [tmRes, tsRes, trRes] = await Promise.all([
+        const [tmRes, tsRes, trRes, cwRes] = await Promise.all([
           fetch('/api/movies/trending?timeWindow=day&type=movie'),
           fetch('/api/movies/trending?timeWindow=day&type=tv'),
           fetch('/api/movies/top-rated'),
+          fetch('/api/watch-progress', { credentials: 'include' }),
         ]);
 
         if (tmRes.ok) setTrendingMovies((await tmRes.json()).data?.results ?? []);
         if (tsRes.ok) setTrendingShows((await tsRes.json()).data?.results ?? []);
         if (trRes.ok) setTopRatedMovies((await trRes.json()).data?.results ?? []);
+        if (cwRes.ok) setContinueWatching((await cwRes.json()).data ?? []);
       } catch (e) {
         console.error('Dashboard fetch error:', e);
       } finally {
@@ -440,6 +523,20 @@ export default function HomePage() {
       ) : null}
 
       <div className="max-w-[1480px] mx-auto px-10 mt-14">
+
+        {continueWatching.length > 0 && (
+          <section className="mb-14">
+            <SectionHeader title="Continue Watching" />
+            <ScrollRow>
+              {continueWatching.map((item) => (
+                <ContinueWatchingCard
+                  key={`${item.media_type}-${item.tmdb_id}-${item.season}-${item.episode}`}
+                  item={item}
+                />
+              ))}
+            </ScrollRow>
+          </section>
+        )}
 
         <section className="mb-14">
           <div className="flex items-end justify-between mb-7">
