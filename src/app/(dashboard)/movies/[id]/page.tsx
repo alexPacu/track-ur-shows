@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { PlusIcon } from '@/components/Icons';
 
@@ -11,6 +11,8 @@ interface MovieDetails {
   overview: string;
   poster_url: string | null;
   backdrop_url: string | null;
+  poster_path: string | null;
+  backdrop_path: string | null;
   vote_average: number;
   release_date: string;
   runtime: number;
@@ -29,17 +31,36 @@ function buildProfileUrl(path: string | null) {
 
 export default function MovieDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = params.id as string;
   const [movie, setMovie] = useState<MovieDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [playerOpen, setPlayerOpen] = useState(false);
+  const [resumeSeconds, setResumeSeconds] = useState(0);
+  const [savedProgress, setSavedProgress] = useState<{ seconds: number } | null>(null);
+
+  // latest progress snapshot used when closing the player
+  const latestProgress = useRef({ seconds: 0, duration: 0, percent: 0 });
 
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`/api/movies/${id}`);
-        if (res.ok) {
-          const json = await res.json();
+        const [movieRes, progressRes] = await Promise.all([
+          fetch(`/api/movies/${id}`),
+          fetch('/api/watch-progress', { credentials: 'include' }),
+        ]);
+        if (movieRes.ok) {
+          const json = await movieRes.json();
           setMovie(json.data);
+        }
+        if (progressRes.ok) {
+          const { data } = await progressRes.json();
+          const entry = (data ?? []).find(
+            (p: any) => Number(p.tmdb_id) === Number(id) && p.media_type === 'movie'
+          );
+          if (entry && Number(entry.progress_seconds) > 0) {
+            setSavedProgress({ seconds: Number(entry.progress_seconds) });
+          }
         }
       } catch (e) {
         console.error('Failed to load movie:', e);
@@ -49,6 +70,133 @@ export default function MovieDetailPage() {
     };
     load();
   }, [id]);
+
+  useEffect(() => {
+    if (!movie) return;
+    const resume = searchParams.get('resume');
+    if (resume === '1') {
+      const prog = Number(searchParams.get('progress') ?? 0);
+      setResumeSeconds(Number.isFinite(prog) ? prog : 0);
+      setPlayerOpen(true);
+    }
+  }, [movie, searchParams]);
+
+  const saveProgress = async (opts: {
+    seconds: number;
+    duration: number;
+    percent: number;
+    completed?: boolean;
+  }) => {
+    if (!movie) return;
+    try {
+      await fetch('/api/watch-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          tmdbId: Number(id),
+          mediaType: 'movie',
+          progressSeconds: opts.seconds,
+          durationSeconds: opts.duration,
+          progressPercent: opts.percent,
+          title: movie.title,
+          posterPath: movie.poster_path,
+          backdropPath: movie.backdrop_path,
+          completed: opts.completed ?? false,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to save watch progress:', e);
+    }
+  };
+
+  // event-driven progress tracking: advance only when Vidking reports playback
+  useEffect(() => {
+    if (!playerOpen || !movie) return;
+
+    const fallbackDuration = (movie.runtime ?? 0) * 60;
+
+    const initialSeconds = (() => {
+      const raw = Math.max(0, Math.floor(resumeSeconds));
+      const rewound = Math.max(0, raw - 10);
+      if (fallbackDuration > 0) return Math.min(rewound, Math.max(0, fallbackDuration - 5));
+      return rewound;
+    })();
+
+    latestProgress.current = {
+      seconds: initialSeconds,
+      duration: fallbackDuration,
+      percent: fallbackDuration > 0 ? (initialSeconds / fallbackDuration) * 100 : 0,
+    };
+
+    saveProgress({
+      seconds: latestProgress.current.seconds,
+      duration: latestProgress.current.duration,
+      percent: latestProgress.current.percent,
+    });
+
+    // while playing, persist the current state every 5s as a safety net for
+    // cases where the user closes the tab
+    let isPlaying = false;
+    const saveInterval = setInterval(() => {
+      if (!isPlaying) return;
+      saveProgress({
+        seconds: latestProgress.current.seconds,
+        duration: latestProgress.current.duration,
+        percent: latestProgress.current.percent,
+      });
+    }, 5000);
+
+    const handler = (event: MessageEvent) => {
+      if (typeof event.data !== 'string') return;
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg?.type !== 'PLAYER_EVENT') return;
+        const { event: evt, currentTime, duration, progress } = msg.data ?? {};
+        if (typeof currentTime === 'number') {
+          const dur = Math.floor(duration ?? latestProgress.current.duration ?? fallbackDuration);
+          const clamped = dur > 0 ? Math.min(currentTime, dur) : currentTime;
+          const pct = typeof progress === 'number' && progress > 0
+            ? progress
+            : dur > 0 ? (clamped / dur) * 100 : 0;
+          latestProgress.current = {
+            seconds: Math.floor(clamped),
+            duration: dur,
+            percent: Math.min(100, pct),
+          };
+        }
+        if (evt === 'play' || evt === 'timeupdate') isPlaying = true;
+        if (evt === 'pause' || evt === 'ended') isPlaying = false;
+        if (evt === 'pause' || evt === 'ended' || evt === 'seeked') {
+          saveProgress({
+            seconds: latestProgress.current.seconds,
+            duration: latestProgress.current.duration,
+            percent: latestProgress.current.percent,
+            completed: evt === 'ended',
+          });
+        }
+      } catch {
+        // ignore non-json messages
+      }
+    };
+    window.addEventListener('message', handler);
+
+    return () => {
+      clearInterval(saveInterval);
+      window.removeEventListener('message', handler);
+    };
+  }, [playerOpen, movie, resumeSeconds]);
+
+  const closePlayer = () => {
+    // always flush latest progress on close, even for short sessions
+    saveProgress({
+      seconds: latestProgress.current.seconds,
+      duration: latestProgress.current.duration,
+      percent: latestProgress.current.percent,
+    });
+    setPlayerOpen(false);
+    setResumeSeconds(0);
+  };
 
   if (loading) {
     return (
@@ -81,6 +229,22 @@ export default function MovieDetailPage() {
   const director = movie.credits?.crew?.find((c) => c.job === 'Director');
   const cast = movie.credits?.cast?.slice(0, 12) || [];
   const trailer = movie.videos?.find((v) => v.type === 'Trailer' && v.site === 'YouTube');
+
+  // Vidking resume: use seconds. A tiny rewind + clamping improves reliability.
+  const movieDurationSeconds = (movie.runtime ?? 0) * 60;
+  const safeStartSeconds = (() => {
+    const raw = Math.max(0, Math.floor(resumeSeconds));
+    const rewound = Math.max(0, raw - 10);
+    if (movieDurationSeconds > 0) return Math.min(rewound, Math.max(0, movieDurationSeconds - 5));
+    return rewound;
+  })();
+
+  // Try `start` (common seek param) instead of `progress`.
+  const embedSrc =
+    `https://www.vidking.net/embed/movie/${id}` +
+    (safeStartSeconds > 0
+      ? `?autoPlay=true&start=${safeStartSeconds}`
+      : '?autoPlay=true');
 
   return (
     <div className="pb-20">
@@ -148,8 +312,17 @@ export default function MovieDetailPage() {
             )}
 
             <div className="flex gap-3">
-              <button className="flex items-center gap-2.5 px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-white/85 transition-colors text-sm">
-                <span>▶</span> Play
+              <button
+                onClick={() => {
+                  const raw = savedProgress?.seconds ?? 0;
+                  const dur = (movie.runtime ?? 0) * 60;
+                  const clamped = Math.max(0, Math.floor(raw));
+                  setResumeSeconds(dur > 0 ? Math.min(clamped, Math.max(0, dur - 5)) : clamped);
+                  setPlayerOpen(true);
+                }}
+                className="flex items-center gap-2.5 px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-white/85 transition-colors text-sm"
+              >
+                <span>▶</span> {savedProgress ? 'Continue Watching' : 'Play'}
               </button>
               <button className="flex items-center justify-center w-11 h-11 rounded-full border-2 border-white/60 text-white hover:border-accent-blue hover:text-accent-blue transition-colors">
                 <PlusIcon className="w-5 h-5" />
@@ -158,6 +331,27 @@ export default function MovieDetailPage() {
           </div>
         </div>
       </section>
+
+      {/* fullscreen player overlay */}
+      {playerOpen && (
+        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+          <button
+            onClick={closePlayer}
+            className="absolute top-5 right-5 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors text-xl"
+          >
+            ✕
+          </button>
+          <iframe
+            src={embedSrc}
+            width="100%"
+            height="100%"
+            allowFullScreen
+            allow="autoplay; fullscreen"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+            className="w-full h-full border-0"
+          />
+        </div>
+      )}
 
       <div className="max-w-[1480px] mx-auto px-10 mt-10 space-y-14">
         {movie.overview && (

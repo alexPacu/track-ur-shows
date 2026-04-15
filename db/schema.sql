@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS list_items CASCADE;
 DROP TABLE IF EXISTS user_lists CASCADE;
 DROP TABLE IF EXISTS user_reviews CASCADE;
 DROP TABLE IF EXISTS user_episodes CASCADE;
+DROP TABLE IF EXISTS watch_progress CASCADE;
 DROP TABLE IF EXISTS user_library CASCADE;
 DROP TABLE IF EXISTS show_watch_providers CASCADE;
 DROP TABLE IF EXISTS episodes CASCADE;
@@ -189,6 +190,29 @@ CREATE TABLE user_episodes (
 );
 
 CREATE INDEX idx_user_episodes_user_id_watched ON user_episodes(user_id, watched_date);
+
+-- continue watching: one row per (user, movie) or (user, show, season, episode)
+-- season/episode default to 0 for movies so the unique constraint covers both cases
+CREATE TABLE watch_progress (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tmdb_id BIGINT NOT NULL,
+  media_type VARCHAR(10) NOT NULL CHECK (media_type IN ('movie', 'tv')),
+  season INTEGER NOT NULL DEFAULT 0,
+  episode INTEGER NOT NULL DEFAULT 0,
+  progress_seconds INTEGER DEFAULT 0,
+  duration_seconds INTEGER DEFAULT 0,
+  progress_percent DECIMAL(5,2) DEFAULT 0,
+  title VARCHAR(500),
+  poster_path VARCHAR(500),
+  backdrop_path VARCHAR(500),
+  completed BOOLEAN DEFAULT FALSE,
+  last_watched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, tmdb_id, media_type, season, episode)
+);
+
+CREATE INDEX idx_watch_progress_user_last ON watch_progress(user_id, last_watched_at DESC);
 
 CREATE TABLE user_reviews (
   id BIGSERIAL PRIMARY KEY,

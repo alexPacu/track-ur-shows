@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { PlusIcon } from '@/components/Icons';
 
@@ -11,6 +11,8 @@ interface ShowDetails {
   overview: string;
   poster_url: string | null;
   backdrop_url: string | null;
+  poster_path: string | null;
+  backdrop_path: string | null;
   vote_average: number;
   first_air_date: string;
   last_air_date: string;
@@ -43,6 +45,7 @@ function buildProfileUrl(path: string | null) {
 
 export default function ShowDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = params.id as string;
 
   const [show, setShow] = useState<ShowDetails | null>(null);
@@ -53,16 +56,40 @@ export default function ShowDetailPage() {
   const [episodesLoading, setEpisodesLoading] = useState(false);
   const [episodeCache, setEpisodeCache] = useState<Record<number, Episode[]>>({});
 
+  // tracks which episode is currently playing
+  const [playingEpisode, setPlayingEpisode] = useState<{ season: number; episode: number } | null>(null);
+  const [resumeSeconds, setResumeSeconds] = useState(0);
+  const autoResumedRef = useRef(false);
+  const [savedProgress, setSavedProgress] = useState<{ season: number; episode: number; seconds: number } | null>(null);
+
+  const latestProgress = useRef({ seconds: 0, duration: 0, percent: 0 });
+
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`/api/shows/${id}`);
-        if (res.ok) {
-          const json = await res.json();
+        const [showRes, progressRes] = await Promise.all([
+          fetch(`/api/shows/${id}`),
+          fetch('/api/watch-progress', { credentials: 'include' }),
+        ]);
+        if (showRes.ok) {
+          const json = await showRes.json();
           setShow(json.data);
           const realSeasons = (json.data.seasons || []).filter((s: any) => s.season_number > 0);
           if (realSeasons.length > 0) {
             setSelectedSeason(realSeasons[0].season_number);
+          }
+        }
+        if (progressRes.ok) {
+          const { data } = await progressRes.json();
+          const entry = (data ?? []).find(
+            (p: any) => Number(p.tmdb_id) === Number(id) && p.media_type === 'tv'
+          );
+          if (entry) {
+            setSavedProgress({
+              season: Number(entry.season),
+              episode: Number(entry.episode),
+              seconds: Number(entry.progress_seconds),
+            });
           }
         }
       } catch (e) {
@@ -99,7 +126,151 @@ export default function ShowDetailPage() {
     if (show && selectedSeason > 0) {
       fetchEpisodes(selectedSeason);
     }
-  }, [show, selectedSeason]); 
+  }, [show, selectedSeason]);
+
+  // auto-open player IF continue watching
+  useEffect(() => {
+    if (!show || autoResumedRef.current) return;
+    const resume = searchParams.get('resume');
+    if (resume !== '1') return;
+    const season = Number(searchParams.get('season') ?? 1);
+    const episode = Number(searchParams.get('episode') ?? 1);
+    const prog = Number(searchParams.get('progress') ?? 0);
+    autoResumedRef.current = true;
+    setSelectedSeason(season);
+    setResumeSeconds(Number.isFinite(prog) ? prog : 0);
+    setPlayingEpisode({ season, episode });
+  }, [show, searchParams]);
+
+  const saveProgress = async (opts: {
+    season: number;
+    episode: number;
+    seconds: number;
+    duration: number;
+    percent: number;
+    completed?: boolean;
+  }) => {
+    if (!show) return;
+    try {
+      await fetch('/api/watch-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          tmdbId: Number(id),
+          mediaType: 'tv',
+          season: opts.season,
+          episode: opts.episode,
+          progressSeconds: opts.seconds,
+          durationSeconds: opts.duration,
+          progressPercent: opts.percent,
+          title: show.name,
+          posterPath: show.poster_path,
+          backdropPath: show.backdrop_path,
+          completed: opts.completed ?? false,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to save watch progress:', e);
+    }
+  };
+
+  // same concept as movies but season+eps
+  useEffect(() => {
+    if (!playingEpisode || !show) return;
+
+    const currentEp = episodes.find((e) => e.episode_number === playingEpisode.episode);
+    const fallbackDuration = ((currentEp?.runtime ?? 45) || 45) * 60;
+
+    const initialSeconds = (() => {
+      const raw = Math.max(0, Math.floor(resumeSeconds));
+      return Math.max(0, raw - 10);
+    })();
+
+    latestProgress.current = {
+      seconds: initialSeconds,
+      duration: fallbackDuration,
+      percent: fallbackDuration > 0 ? (initialSeconds / fallbackDuration) * 100 : 0,
+    };
+
+    saveProgress({
+      season: playingEpisode.season,
+      episode: playingEpisode.episode,
+      seconds: latestProgress.current.seconds,
+      duration: latestProgress.current.duration,
+      percent: latestProgress.current.percent,
+    });
+
+    // safety-net save every 5s, but only while the player is actively playing,
+    // so paused/closed sessions never advance past the real position
+    let isPlaying = false;
+    const saveInterval = setInterval(() => {
+      if (!isPlaying) return;
+      saveProgress({
+        season: playingEpisode.season,
+        episode: playingEpisode.episode,
+        seconds: latestProgress.current.seconds,
+        duration: latestProgress.current.duration,
+        percent: latestProgress.current.percent,
+      });
+    }, 5000);
+
+    const handler = (event: MessageEvent) => {
+      if (typeof event.data !== 'string') return;
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg?.type !== 'PLAYER_EVENT') return;
+        const { event: evt, currentTime, duration, progress } = msg.data ?? {};
+        if (typeof currentTime === 'number') {
+          const dur = Math.floor(duration ?? latestProgress.current.duration ?? fallbackDuration);
+          const clamped = dur > 0 ? Math.min(currentTime, dur) : currentTime;
+          const pct = typeof progress === 'number' && progress > 0
+            ? progress
+            : dur > 0 ? (clamped / dur) * 100 : 0;
+          latestProgress.current = {
+            seconds: Math.floor(clamped),
+            duration: dur,
+            percent: Math.min(100, pct),
+          };
+        }
+        if (evt === 'play' || evt === 'timeupdate') isPlaying = true;
+        if (evt === 'pause' || evt === 'ended') isPlaying = false;
+        if (evt === 'pause' || evt === 'ended' || evt === 'seeked') {
+          saveProgress({
+            season: playingEpisode.season,
+            episode: playingEpisode.episode,
+            seconds: latestProgress.current.seconds,
+            duration: latestProgress.current.duration,
+            percent: latestProgress.current.percent,
+            completed: evt === 'ended',
+          });
+        }
+      } catch {
+        // ignore non-json messages
+      }
+    };
+    window.addEventListener('message', handler);
+
+    return () => {
+      clearInterval(saveInterval);
+      window.removeEventListener('message', handler);
+    };
+  }, [playingEpisode, show, episodes, resumeSeconds]);
+
+  const closePlayer = () => {
+    if (playingEpisode) {
+      saveProgress({
+        season: playingEpisode.season,
+        episode: playingEpisode.episode,
+        seconds: latestProgress.current.seconds,
+        duration: latestProgress.current.duration,
+        percent: latestProgress.current.percent,
+      });
+    }
+    setPlayingEpisode(null);
+    setResumeSeconds(0);
+    latestProgress.current = { seconds: 0, duration: 0, percent: 0 };
+  };
 
   if (loading) {
     return (
@@ -127,6 +298,17 @@ export default function ShowDetailPage() {
   const cast = show.credits?.cast?.slice(0, 12) || [];
   const realSeasons = show.seasons?.filter((s) => s.season_number > 0) || [];
   const creator = show.created_by?.[0];
+
+  // Vidking resume: use seconds. A tiny rewind improves reliability.
+  const safeStartSeconds = Math.max(0, Math.floor(resumeSeconds) - 10);
+
+  // Try `start` (common seek param) instead of `progress`.
+  const embedSrc = playingEpisode
+    ? `https://www.vidking.net/embed/tv/${id}/${playingEpisode.season}/${playingEpisode.episode}` +
+      (safeStartSeconds > 0
+        ? `?autoPlay=true&nextEpisode=true&episodeSelector=true&start=${safeStartSeconds}`
+        : '?autoPlay=true&nextEpisode=true&episodeSelector=true')
+    : '';
 
   return (
     <div className="pb-20">
@@ -185,6 +367,18 @@ export default function ShowDetailPage() {
             )}
 
             <div className="flex gap-3">
+              {savedProgress && (
+                <button
+                  onClick={() => {
+                    setSelectedSeason(savedProgress.season);
+                    setResumeSeconds(Math.max(0, Math.floor(savedProgress.seconds)));
+                    setPlayingEpisode({ season: savedProgress.season, episode: savedProgress.episode });
+                  }}
+                  className="flex items-center gap-2.5 px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-white/85 transition-colors text-sm"
+                >
+                  <span>▶</span> Continue Watching S{savedProgress.season}·E{savedProgress.episode}
+                </button>
+              )}
               <button className="flex items-center justify-center w-11 h-11 rounded-full border-2 border-white/60 text-white hover:border-accent-blue hover:text-accent-blue transition-colors">
                 <PlusIcon className="w-5 h-5" />
               </button>
@@ -238,6 +432,17 @@ export default function ShowDetailPage() {
                 {episodes.map((ep) => (
                   <div
                     key={ep.id}
+                    onClick={() => {
+                      const isCurrent =
+                        playingEpisode?.season === selectedSeason &&
+                        playingEpisode?.episode === ep.episode_number;
+                      if (isCurrent) {
+                        closePlayer();
+                      } else {
+                        setResumeSeconds(0);
+                        setPlayingEpisode({ season: selectedSeason, episode: ep.episode_number });
+                      }
+                    }}
                     className="flex gap-4 p-4 rounded-xl bg-bg-card/60 border border-accent-blue/10 hover:border-accent-blue/30 transition-colors group cursor-pointer"
                   >
                     <div className="flex-shrink-0 w-[185px] h-[104px] rounded-lg overflow-hidden bg-bg-dark relative">
@@ -321,6 +526,27 @@ export default function ShowDetailPage() {
           </section>
         )}
       </div>
+
+      {/* fullscreen player overlay */}
+      {playingEpisode && (
+        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+          <button
+            onClick={closePlayer}
+            className="absolute top-5 right-5 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors text-xl"
+          >
+            ✕
+          </button>
+          <iframe
+            src={embedSrc}
+            width="100%"
+            height="100%"
+            allowFullScreen
+            allow="autoplay; fullscreen"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+            className="w-full h-full border-0"
+          />
+        </div>
+      )}
     </div>
   );
 }
