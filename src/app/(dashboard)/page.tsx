@@ -35,7 +35,13 @@ function buildTmdbImage(path: string | null, size: string = 'w780') {
   return `https://image.tmdb.org/t/p/${size}${path}`;
 }
 
-function ContinueWatchingCard({ item }: { item: ContinueWatchingItem }) {
+function ContinueWatchingCard({
+  item,
+  onRequestDelete,
+}: {
+  item: ContinueWatchingItem;
+  onRequestDelete: (item: ContinueWatchingItem) => void;
+}) {
   const basePath = item.media_type === 'tv' ? 'shows' : 'movies';
   const href = `/dashboard/${basePath}/${item.tmdb_id}`;
 
@@ -55,6 +61,19 @@ function ContinueWatchingCard({ item }: { item: ContinueWatchingItem }) {
   return (
     <Link href={href} className="group/card flex-shrink-0 w-[320px]">
       <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-accent-blue/20 hover:border-accent-blue/50 transition-all duration-300 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onRequestDelete(item);
+          }}
+          aria-label="Remove from Continue Watching"
+          className="absolute top-2.5 right-2.5 z-10 w-7 h-7 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:text-white hover:bg-black/75 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 focus:opacity-100 transition-opacity"
+        >
+          ✕
+        </button>
+
         {imageUrl ? (
           <Image
             src={imageUrl}
@@ -69,12 +88,6 @@ function ContinueWatchingCard({ item }: { item: ContinueWatchingItem }) {
 
         <div className="absolute inset-0 bg-gradient-to-t from-bg-dark/95 via-bg-dark/30 to-transparent" />
 
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity">
-          <span className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center text-black text-xl shadow-lg">
-            ▶
-          </span>
-        </div>
-
         <div className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded text-[10px] font-bold text-text-muted/90 uppercase tracking-wider bg-black/30">
           {label}
         </div>
@@ -84,10 +97,7 @@ function ContinueWatchingCard({ item }: { item: ContinueWatchingItem }) {
             {item.title ?? 'Untitled'}
           </p>
           <div className="mt-2 h-1 w-full rounded-full bg-white/15 overflow-hidden">
-            <div
-              className="h-full bg-accent-blue transition-all"
-              style={{ width: `${percent}%` }}
-            />
+            <div className="h-full bg-accent-blue transition-all" style={{ width: `${percent}%` }} />
           </div>
         </div>
       </div>
@@ -122,7 +132,7 @@ function ScrollRow({ children }: { children: React.ReactNode }) {
 
       <div
         ref={ref}
-        className="flex gap-5 overflow-x-auto pb-2"
+        className="flex gap-5 overflow-x-auto overflow-y-hidden pb-2"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {children}
@@ -162,12 +172,12 @@ function BackdropCard({ item, type }: { item: MediaItem; type: 'movie' | 'tv' })
 
         <div className="absolute inset-0 bg-gradient-to-t from-bg-dark/90 via-bg-dark/20 to-transparent" />
 
-        <div className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded text-[10px] font-bold text-text-muted/90 uppercase tracking-wider">
+        <div className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded text-[10px] font-bold text-text-muted/90 uppercase tracking-wider bg-black/65 backdrop-blur-sm">
           {type === 'tv' ? 'TV SHOW' : 'MOVIE'}
         </div>
 
         {item.vote_average != null && item.vote_average > 0 && (
-          <div className="absolute top-2.5 right-2.5 flex items-center gap-1 text-accent-blue text-xs font-bold">
+          <div className="absolute top-2.5 right-2.5 flex items-center gap-1 text-accent-blue text-xs font-bold px-2 py-0.5 rounded bg-black/65 backdrop-blur-sm">
             ★ {item.vote_average.toFixed(1)}
           </div>
         )}
@@ -319,6 +329,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
 
   const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<ContinueWatchingItem | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const [trendingTab, setTrendingTab] = useState<'movie' | 'tv'>('movie');
   const [top10Tab, setTop10Tab] = useState<'movie' | 'tv'>('movie');
@@ -418,6 +430,47 @@ export default function HomePage() {
   const handleProviderTab = (id: string) => {
     setProviderTab(id);
     fetchProvider(id);
+  };
+
+  const requestDeleteContinueWatching = (item: ContinueWatchingItem) => {
+    setDeleteTarget(item);
+  };
+
+  const confirmDeleteContinueWatching = async () => {
+    if (!deleteTarget || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      const params = new URLSearchParams({
+        tmdbId: String(deleteTarget.tmdb_id),
+        mediaType: deleteTarget.media_type,
+        season: String(deleteTarget.season ?? 0),
+        episode: String(deleteTarget.episode ?? 0),
+      });
+
+      const res = await fetch(`/api/watch-progress?${params.toString()}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!res.ok) throw new Error('Failed to delete watch progress');
+
+      setContinueWatching((prev) =>
+        prev.filter(
+          (p) =>
+            !(
+              p.tmdb_id === deleteTarget.tmdb_id &&
+              p.media_type === deleteTarget.media_type &&
+              p.season === deleteTarget.season &&
+              p.episode === deleteTarget.episode
+            )
+        )
+      );
+      setDeleteTarget(null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   const [heroIndex, setHeroIndex] = useState(0);
@@ -524,7 +577,16 @@ export default function HomePage() {
 
       <div className="max-w-[1480px] mx-auto px-10 mt-14">
 
-        {continueWatching.length > 0 && (
+        {loading ? (
+          <section className="mb-14">
+            <div className="h-7 w-52 bg-bg-card animate-pulse rounded mb-7" />
+            <div className="flex gap-5 overflow-hidden">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex-shrink-0 w-[320px] aspect-video bg-bg-card animate-pulse rounded-xl" />
+              ))}
+            </div>
+          </section>
+        ) : continueWatching.length > 0 ? (
           <section className="mb-14">
             <SectionHeader title="Continue Watching" />
             <ScrollRow>
@@ -532,11 +594,12 @@ export default function HomePage() {
                 <ContinueWatchingCard
                   key={`${item.media_type}-${item.tmdb_id}-${item.season}-${item.episode}`}
                   item={item}
+                  onRequestDelete={requestDeleteContinueWatching}
                 />
               ))}
             </ScrollRow>
           </section>
-        )}
+        ) : null}
 
         <section className="mb-14">
           <div className="flex items-end justify-between mb-7">
@@ -669,6 +732,50 @@ export default function HomePage() {
         </section>
 
       </div>
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+          onClick={() => {
+            if (!deleteBusy) setDeleteTarget(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-md rounded-2xl bg-bg-card border border-accent-blue/20 p-6 shadow-[0_10px_40px_rgba(0,0,0,0.6)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-bold text-text-primary">Remove from Continue Watching?</h3>
+            <p className="text-text-muted text-sm mt-2">
+              This will delete your saved progress for{' '}
+              <span className="text-text-primary font-semibold">{deleteTarget.title ?? 'this item'}</span>
+              {deleteTarget.media_type === 'tv'
+                ? ` (S${deleteTarget.season} · E${deleteTarget.episode})`
+                : ''}.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteBusy}
+                className="px-4 py-2 rounded-full border border-white/25 text-white/90 hover:border-white/40 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteContinueWatching}
+                disabled={deleteBusy}
+                className="px-4 py-2 rounded-full bg-red-600 text-white font-semibold hover:bg-red-500 disabled:opacity-50"
+              >
+                {deleteBusy ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

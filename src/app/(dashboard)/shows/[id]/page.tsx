@@ -60,19 +60,36 @@ export default function ShowDetailPage() {
   const [playingEpisode, setPlayingEpisode] = useState<{ season: number; episode: number } | null>(null);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const autoResumedRef = useRef(false);
+  const [savedProgress, setSavedProgress] = useState<{ season: number; episode: number; seconds: number } | null>(null);
 
   const latestProgress = useRef({ seconds: 0, duration: 0, percent: 0 });
 
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`/api/shows/${id}`);
-        if (res.ok) {
-          const json = await res.json();
+        const [showRes, progressRes] = await Promise.all([
+          fetch(`/api/shows/${id}`),
+          fetch('/api/watch-progress', { credentials: 'include' }),
+        ]);
+        if (showRes.ok) {
+          const json = await showRes.json();
           setShow(json.data);
           const realSeasons = (json.data.seasons || []).filter((s: any) => s.season_number > 0);
           if (realSeasons.length > 0) {
             setSelectedSeason(realSeasons[0].season_number);
+          }
+        }
+        if (progressRes.ok) {
+          const { data } = await progressRes.json();
+          const entry = (data ?? []).find(
+            (p: any) => Number(p.tmdb_id) === Number(id) && p.media_type === 'tv'
+          );
+          if (entry) {
+            setSavedProgress({
+              season: Number(entry.season),
+              episode: Number(entry.episode),
+              seconds: Number(entry.progress_seconds),
+            });
           }
         }
       } catch (e) {
@@ -165,10 +182,15 @@ export default function ShowDetailPage() {
     const currentEp = episodes.find((e) => e.episode_number === playingEpisode.episode);
     const fallbackDuration = ((currentEp?.runtime ?? 45) || 45) * 60;
 
+    const initialSeconds = (() => {
+      const raw = Math.max(0, Math.floor(resumeSeconds));
+      return Math.max(0, raw - 10);
+    })();
+
     latestProgress.current = {
-      seconds: resumeSeconds,
+      seconds: initialSeconds,
       duration: fallbackDuration,
-      percent: fallbackDuration > 0 ? (resumeSeconds / fallbackDuration) * 100 : 0,
+      percent: fallbackDuration > 0 ? (initialSeconds / fallbackDuration) * 100 : 0,
     };
 
     saveProgress({
@@ -233,7 +255,7 @@ export default function ShowDetailPage() {
       clearInterval(saveInterval);
       window.removeEventListener('message', handler);
     };
-  }, [playingEpisode, show, episodes]);
+  }, [playingEpisode, show, episodes, resumeSeconds]);
 
   const closePlayer = () => {
     if (playingEpisode) {
@@ -277,10 +299,15 @@ export default function ShowDetailPage() {
   const realSeasons = show.seasons?.filter((s) => s.season_number > 0) || [];
   const creator = show.created_by?.[0];
 
+  // Vidking resume: use seconds. A tiny rewind improves reliability.
+  const safeStartSeconds = Math.max(0, Math.floor(resumeSeconds) - 10);
+
+  // Try `start` (common seek param) instead of `progress`.
   const embedSrc = playingEpisode
     ? `https://www.vidking.net/embed/tv/${id}/${playingEpisode.season}/${playingEpisode.episode}` +
-      `?autoPlay=true&nextEpisode=true&episodeSelector=true` +
-      (resumeSeconds > 0 ? `&progress=${resumeSeconds}` : '')
+      (safeStartSeconds > 0
+        ? `?autoPlay=true&nextEpisode=true&episodeSelector=true&start=${safeStartSeconds}`
+        : '?autoPlay=true&nextEpisode=true&episodeSelector=true')
     : '';
 
   return (
@@ -340,6 +367,18 @@ export default function ShowDetailPage() {
             )}
 
             <div className="flex gap-3">
+              {savedProgress && (
+                <button
+                  onClick={() => {
+                    setSelectedSeason(savedProgress.season);
+                    setResumeSeconds(Math.max(0, Math.floor(savedProgress.seconds)));
+                    setPlayingEpisode({ season: savedProgress.season, episode: savedProgress.episode });
+                  }}
+                  className="flex items-center gap-2.5 px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-white/85 transition-colors text-sm"
+                >
+                  <span>▶</span> Continue Watching S{savedProgress.season}·E{savedProgress.episode}
+                </button>
+              )}
               <button className="flex items-center justify-center w-11 h-11 rounded-full border-2 border-white/60 text-white hover:border-accent-blue hover:text-accent-blue transition-colors">
                 <PlusIcon className="w-5 h-5" />
               </button>

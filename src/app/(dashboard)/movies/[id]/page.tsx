@@ -37,6 +37,7 @@ export default function MovieDetailPage() {
   const [loading, setLoading] = useState(true);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [resumeSeconds, setResumeSeconds] = useState(0);
+  const [savedProgress, setSavedProgress] = useState<{ seconds: number } | null>(null);
 
   // latest progress snapshot used when closing the player
   const latestProgress = useRef({ seconds: 0, duration: 0, percent: 0 });
@@ -44,10 +45,22 @@ export default function MovieDetailPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`/api/movies/${id}`);
-        if (res.ok) {
-          const json = await res.json();
+        const [movieRes, progressRes] = await Promise.all([
+          fetch(`/api/movies/${id}`),
+          fetch('/api/watch-progress', { credentials: 'include' }),
+        ]);
+        if (movieRes.ok) {
+          const json = await movieRes.json();
           setMovie(json.data);
+        }
+        if (progressRes.ok) {
+          const { data } = await progressRes.json();
+          const entry = (data ?? []).find(
+            (p: any) => Number(p.tmdb_id) === Number(id) && p.media_type === 'movie'
+          );
+          if (entry && Number(entry.progress_seconds) > 0) {
+            setSavedProgress({ seconds: Number(entry.progress_seconds) });
+          }
         }
       } catch (e) {
         console.error('Failed to load movie:', e);
@@ -103,10 +116,17 @@ export default function MovieDetailPage() {
 
     const fallbackDuration = (movie.runtime ?? 0) * 60;
 
+    const initialSeconds = (() => {
+      const raw = Math.max(0, Math.floor(resumeSeconds));
+      const rewound = Math.max(0, raw - 10);
+      if (fallbackDuration > 0) return Math.min(rewound, Math.max(0, fallbackDuration - 5));
+      return rewound;
+    })();
+
     latestProgress.current = {
-      seconds: resumeSeconds,
+      seconds: initialSeconds,
       duration: fallbackDuration,
-      percent: fallbackDuration > 0 ? (resumeSeconds / fallbackDuration) * 100 : 0,
+      percent: fallbackDuration > 0 ? (initialSeconds / fallbackDuration) * 100 : 0,
     };
 
     saveProgress({
@@ -165,7 +185,7 @@ export default function MovieDetailPage() {
       clearInterval(saveInterval);
       window.removeEventListener('message', handler);
     };
-  }, [playerOpen, movie]);
+  }, [playerOpen, movie, resumeSeconds]);
 
   const closePlayer = () => {
     // always flush latest progress on close, even for short sessions
@@ -210,9 +230,21 @@ export default function MovieDetailPage() {
   const cast = movie.credits?.cast?.slice(0, 12) || [];
   const trailer = movie.videos?.find((v) => v.type === 'Trailer' && v.site === 'YouTube');
 
+  // Vidking resume: use seconds. A tiny rewind + clamping improves reliability.
+  const movieDurationSeconds = (movie.runtime ?? 0) * 60;
+  const safeStartSeconds = (() => {
+    const raw = Math.max(0, Math.floor(resumeSeconds));
+    const rewound = Math.max(0, raw - 10);
+    if (movieDurationSeconds > 0) return Math.min(rewound, Math.max(0, movieDurationSeconds - 5));
+    return rewound;
+  })();
+
+  // Try `start` (common seek param) instead of `progress`.
   const embedSrc =
     `https://www.vidking.net/embed/movie/${id}` +
-    (resumeSeconds > 0 ? `?autoPlay=true&progress=${resumeSeconds}` : '?autoPlay=true');
+    (safeStartSeconds > 0
+      ? `?autoPlay=true&start=${safeStartSeconds}`
+      : '?autoPlay=true');
 
   return (
     <div className="pb-20">
@@ -282,12 +314,15 @@ export default function MovieDetailPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => {
-                  setResumeSeconds(0);
+                  const raw = savedProgress?.seconds ?? 0;
+                  const dur = (movie.runtime ?? 0) * 60;
+                  const clamped = Math.max(0, Math.floor(raw));
+                  setResumeSeconds(dur > 0 ? Math.min(clamped, Math.max(0, dur - 5)) : clamped);
                   setPlayerOpen(true);
                 }}
                 className="flex items-center gap-2.5 px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-white/85 transition-colors text-sm"
               >
-                <span>▶</span> Play
+                <span>▶</span> {savedProgress ? 'Continue Watching' : 'Play'}
               </button>
               <button className="flex items-center justify-center w-11 h-11 rounded-full border-2 border-white/60 text-white hover:border-accent-blue hover:text-accent-blue transition-colors">
                 <PlusIcon className="w-5 h-5" />
