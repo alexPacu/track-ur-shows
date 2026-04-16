@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractUserFromRequest } from '@/server/middlewares/auth.middleware';
 import { WatchlistService } from '@/server/services/watchlist.service';
+import { validateStatus } from '@/server/validators/watchlist.validator';
+
+const VALID_MEDIA_TYPES = ['movie', 'tv'] as const;
+type MediaType = typeof VALID_MEDIA_TYPES[number];
 
 export async function GET(req: NextRequest) {
   try {
@@ -37,12 +41,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'tmdbId, mediaType, and title are required' }, { status: 400 });
     }
 
+    if (!VALID_MEDIA_TYPES.includes(mediaType)) {
+      return NextResponse.json({ error: 'mediaType must be "movie" or "tv"' }, { status: 400 });
+    }
+
+    const status = body.status ?? 'planning_to_watch';
+    if (!validateStatus(status)) {
+      return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
+    }
+
     const entry = await WatchlistService.addToWatchlist(
       user.userId,
       Number(tmdbId),
-      mediaType,
+      mediaType as MediaType,
       { title, description, posterPath, backdropPath, rating, releaseDate, runtime, genres },
-      body.status ?? 'planning_to_watch'
+      status
     );
 
     return NextResponse.json({ success: true, data: entry }, { status: 201 });
@@ -64,6 +77,10 @@ export async function PUT(req: NextRequest) {
 
     if (!tmdbId || !status) {
       return NextResponse.json({ error: 'tmdbId and status are required' }, { status: 400 });
+    }
+
+    if (!validateStatus(status)) {
+      return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
     }
 
     const updated = await WatchlistService.updateStatus(user.userId, Number(tmdbId), status);

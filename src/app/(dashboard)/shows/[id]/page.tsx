@@ -67,6 +67,7 @@ export default function ShowDetailPage() {
   const [watchlistStatus, setWatchlistStatus] = useState<string | null>(null);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [watchlistExpanded, setWatchlistExpanded] = useState(false);
+  const [watchlistError, setWatchlistError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -270,6 +271,7 @@ export default function ShowDetailPage() {
   const handleWatchlistStatus = async (status: string) => {
     if (watchlistLoading || !show) return;
     setWatchlistLoading(true);
+    setWatchlistError(null);
     try {
       if (inWatchlist) {
         const res = await fetch('/api/watchlist', {
@@ -279,6 +281,7 @@ export default function ShowDetailPage() {
           body: JSON.stringify({ tmdbId: Number(id), status }),
         });
         if (res.ok) { setWatchlistStatus(status); setWatchlistExpanded(false); }
+        else { setWatchlistError('Failed to update status'); }
       } else {
         const res = await fetch('/api/watchlist', {
           method: 'POST',
@@ -298,7 +301,10 @@ export default function ShowDetailPage() {
           }),
         });
         if (res.ok) { setInWatchlist(true); setWatchlistStatus(status); setWatchlistExpanded(false); }
+        else { setWatchlistError('Failed to add to watchlist'); }
       }
+    } catch {
+      setWatchlistError('Network error');
     } finally {
       setWatchlistLoading(false);
     }
@@ -307,9 +313,13 @@ export default function ShowDetailPage() {
   const removeFromWatchlist = async () => {
     if (watchlistLoading) return;
     setWatchlistLoading(true);
+    setWatchlistError(null);
     try {
       const res = await fetch(`/api/watchlist?tmdbId=${id}`, { method: 'DELETE', credentials: 'include' });
       if (res.ok) { setInWatchlist(false); setWatchlistStatus(null); setWatchlistExpanded(false); }
+      else { setWatchlistError('Failed to remove'); }
+    } catch {
+      setWatchlistError('Network error');
     } finally {
       setWatchlistLoading(false);
     }
@@ -485,6 +495,9 @@ export default function ShowDetailPage() {
                 </button>
               )}
             </div>
+            {watchlistError && (
+              <p className="text-red-400 text-xs mt-2">{watchlistError}</p>
+            )}
           </div>
         </div>
       </section>

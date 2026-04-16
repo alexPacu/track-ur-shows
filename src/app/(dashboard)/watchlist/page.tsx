@@ -124,11 +124,6 @@ const STATUS_LABELS: Record<string, string> = {
   planning_to_watch: 'Planned',
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  watching: 'text-accent-blue bg-accent-blue/15 border-accent-blue/30',
-  completed: 'text-green-400 bg-green-400/15 border-green-400/30',
-  planning_to_watch: 'text-blue-300 bg-blue-400/15 border-blue-400/30',
-};
 
 export default function WatchlistPage() {
   const [activeTab, setActiveTab] = useState<TabType>('all');
@@ -160,12 +155,13 @@ export default function WatchlistPage() {
       prev.map((w) => (w.id === item.id ? { ...w, status: newStatus } : w))
     );
     try {
-      await fetch('/api/watchlist', {
+      const res = await fetch('/api/watchlist', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ tmdbId: item.tmdb_id, status: newStatus }),
       });
+      if (!res.ok) throw new Error('Update failed');
     } catch (e) {
       console.error('Failed to update status:', e);
       setWatchlist((prev) =>

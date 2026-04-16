@@ -42,6 +42,7 @@ export default function MovieDetailPage() {
   const [watchlistStatus, setWatchlistStatus] = useState<string | null>(null);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [watchlistExpanded, setWatchlistExpanded] = useState(false);
+  const [watchlistError, setWatchlistError] = useState<string | null>(null);
 
   // latest progress snapshot used when closing the player
   const latestProgress = useRef({ seconds: 0, duration: 0, percent: 0 });
@@ -200,6 +201,7 @@ export default function MovieDetailPage() {
   const handleWatchlistStatus = async (status: string) => {
     if (watchlistLoading || !movie) return;
     setWatchlistLoading(true);
+    setWatchlistError(null);
     try {
       if (inWatchlist) {
         const res = await fetch('/api/watchlist', {
@@ -209,6 +211,7 @@ export default function MovieDetailPage() {
           body: JSON.stringify({ tmdbId: Number(id), status }),
         });
         if (res.ok) { setWatchlistStatus(status); setWatchlistExpanded(false); }
+        else { setWatchlistError('Failed to update status'); }
       } else {
         const res = await fetch('/api/watchlist', {
           method: 'POST',
@@ -229,7 +232,10 @@ export default function MovieDetailPage() {
           }),
         });
         if (res.ok) { setInWatchlist(true); setWatchlistStatus(status); setWatchlistExpanded(false); }
+        else { setWatchlistError('Failed to add to watchlist'); }
       }
+    } catch {
+      setWatchlistError('Network error');
     } finally {
       setWatchlistLoading(false);
     }
@@ -238,9 +244,13 @@ export default function MovieDetailPage() {
   const removeFromWatchlist = async () => {
     if (watchlistLoading) return;
     setWatchlistLoading(true);
+    setWatchlistError(null);
     try {
       const res = await fetch(`/api/watchlist?tmdbId=${id}`, { method: 'DELETE', credentials: 'include' });
       if (res.ok) { setInWatchlist(false); setWatchlistStatus(null); setWatchlistExpanded(false); }
+      else { setWatchlistError('Failed to remove'); }
+    } catch {
+      setWatchlistError('Network error');
     } finally {
       setWatchlistLoading(false);
     }
@@ -431,6 +441,9 @@ export default function MovieDetailPage() {
                 </button>
               )}
             </div>
+            {watchlistError && (
+              <p className="text-red-400 text-xs mt-2">{watchlistError}</p>
+            )}
           </div>
         </div>
       </section>

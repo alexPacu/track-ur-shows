@@ -25,7 +25,7 @@ export interface UserLibraryWithShow extends UserLibraryEntry {
   poster_path?: string;
   backdrop_path?: string;
   rating?: number;
-  genres?: any;
+  genres?: number[] | null;
 }
 
 export class WatchlistRepository {
