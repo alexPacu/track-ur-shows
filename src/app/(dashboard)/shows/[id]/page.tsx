@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { PlusIcon } from '@/components/Icons';
+import { PlusIcon, CheckCircleIcon } from '@/components/Icons';
 
 interface ShowDetails {
   id: number;
@@ -63,13 +63,18 @@ export default function ShowDetailPage() {
   const [savedProgress, setSavedProgress] = useState<{ season: number; episode: number; seconds: number } | null>(null);
 
   const latestProgress = useRef({ seconds: 0, duration: 0, percent: 0 });
+  const [inWatchlist, setInWatchlist] = useState(false);
+  const [watchlistStatus, setWatchlistStatus] = useState<string | null>(null);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
+  const [watchlistExpanded, setWatchlistExpanded] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [showRes, progressRes] = await Promise.all([
+        const [showRes, progressRes, watchlistRes] = await Promise.all([
           fetch(`/api/shows/${id}`),
           fetch('/api/watch-progress', { credentials: 'include' }),
+          fetch(`/api/watchlist?tmdbId=${id}`, { credentials: 'include' }),
         ]);
         if (showRes.ok) {
           const json = await showRes.json();
@@ -91,6 +96,11 @@ export default function ShowDetailPage() {
               seconds: Number(entry.progress_seconds),
             });
           }
+        }
+        if (watchlistRes.ok) {
+          const wlData = await watchlistRes.json();
+          setInWatchlist(wlData.inWatchlist ?? false);
+          setWatchlistStatus(wlData.status ?? null);
         }
       } catch (e) {
         console.error('Failed to load show:', e);
@@ -257,6 +267,54 @@ export default function ShowDetailPage() {
     };
   }, [playingEpisode, show, episodes, resumeSeconds]);
 
+  const handleWatchlistStatus = async (status: string) => {
+    if (watchlistLoading || !show) return;
+    setWatchlistLoading(true);
+    try {
+      if (inWatchlist) {
+        const res = await fetch('/api/watchlist', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ tmdbId: Number(id), status }),
+        });
+        if (res.ok) { setWatchlistStatus(status); setWatchlistExpanded(false); }
+      } else {
+        const res = await fetch('/api/watchlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            tmdbId: Number(id),
+            mediaType: 'tv',
+            title: show.name,
+            description: show.overview,
+            posterPath: show.poster_path,
+            backdropPath: show.backdrop_path,
+            rating: show.vote_average,
+            releaseDate: show.first_air_date,
+            genres: show.genres.map((g) => g.id),
+            status,
+          }),
+        });
+        if (res.ok) { setInWatchlist(true); setWatchlistStatus(status); setWatchlistExpanded(false); }
+      }
+    } finally {
+      setWatchlistLoading(false);
+    }
+  };
+
+  const removeFromWatchlist = async () => {
+    if (watchlistLoading) return;
+    setWatchlistLoading(true);
+    try {
+      const res = await fetch(`/api/watchlist?tmdbId=${id}`, { method: 'DELETE', credentials: 'include' });
+      if (res.ok) { setInWatchlist(false); setWatchlistStatus(null); setWatchlistExpanded(false); }
+    } finally {
+      setWatchlistLoading(false);
+    }
+  };
+
   const closePlayer = () => {
     if (playingEpisode) {
       saveProgress({
@@ -366,7 +424,7 @@ export default function ShowDetailPage() {
               </div>
             )}
 
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               {savedProgress && (
                 <button
                   onClick={() => {
@@ -379,9 +437,53 @@ export default function ShowDetailPage() {
                   <span>▶</span> Continue Watching S{savedProgress.season}·E{savedProgress.episode}
                 </button>
               )}
-              <button className="flex items-center justify-center w-11 h-11 rounded-full border-2 border-white/60 text-white hover:border-accent-blue hover:text-accent-blue transition-colors">
-                <PlusIcon className="w-5 h-5" />
-              </button>
+
+              {watchlistExpanded ? (
+                <div className="flex items-center gap-2">
+                  {(['planning_to_watch', 'watching', 'completed'] as const).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => handleWatchlistStatus(s)}
+                      disabled={watchlistLoading}
+                      className={`px-4 py-2.5 rounded-full text-sm font-semibold border-2 transition-colors disabled:opacity-50 ${
+                        watchlistStatus === s
+                          ? 'border-accent-blue bg-accent-blue text-white'
+                          : 'border-white/40 text-white hover:border-accent-blue hover:text-accent-blue'
+                      }`}
+                    >
+                      {{ planning_to_watch: 'Planned', watching: 'Watching', completed: 'Completed' }[s]}
+                    </button>
+                  ))}
+                  {inWatchlist && (
+                    <button
+                      onClick={removeFromWatchlist}
+                      disabled={watchlistLoading}
+                      className="px-4 py-2.5 rounded-full text-sm font-semibold border-2 border-red-500/50 text-red-400 hover:border-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setWatchlistExpanded(false)}
+                    className="flex items-center justify-center w-10 h-10 rounded-full border-2 border-white/20 text-white/60 hover:border-white/40 hover:text-white transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setWatchlistExpanded(true)}
+                  disabled={watchlistLoading}
+                  title={inWatchlist ? 'Change status' : 'Add to watchlist'}
+                  className={`flex items-center justify-center w-11 h-11 rounded-full border-2 transition-colors disabled:opacity-50 ${
+                    inWatchlist
+                      ? 'border-accent-blue bg-accent-blue/20 text-accent-blue'
+                      : 'border-white/60 text-white hover:border-accent-blue hover:text-accent-blue'
+                  }`}
+                >
+                  {inWatchlist ? <CheckCircleIcon className="w-5 h-5" /> : <PlusIcon className="w-5 h-5" />}
+                </button>
+              )}
             </div>
           </div>
         </div>

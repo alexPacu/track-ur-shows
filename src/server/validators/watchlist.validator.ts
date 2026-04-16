@@ -1,4 +1,4 @@
-const VALID_STATUSES = ['watching', 'completed', 'dropped', 'paused', 'planning_to_watch'];
+const VALID_STATUSES = ['watching', 'completed', 'planning_to_watch'];
 
 export function validateStatus(status: string): boolean {
   return VALID_STATUSES.includes(status);

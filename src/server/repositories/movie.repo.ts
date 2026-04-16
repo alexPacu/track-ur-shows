@@ -45,15 +45,15 @@ export class ShowRepository {
     tmdbId: number,
     data: Omit<Show, 'id' | 'tmdb_id' | 'created_at' | 'updated_at'>
   ): Promise<Show> {
-    const existing = await queryOne<Show>(
-      `SELECT * FROM shows WHERE tmdb_id = $1`,
-      [tmdbId]
-    );
-    if (existing) return existing;
-
     const result = await queryOne<Show>(
       `INSERT INTO shows (tmdb_id, title, description, media_type, genres, rating, release_date, poster_path, backdrop_path, runtime)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (tmdb_id) DO UPDATE SET
+         title = EXCLUDED.title,
+         poster_path = COALESCE(EXCLUDED.poster_path, shows.poster_path),
+         backdrop_path = COALESCE(EXCLUDED.backdrop_path, shows.backdrop_path),
+         rating = COALESCE(EXCLUDED.rating, shows.rating),
+         updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [
         tmdbId,
