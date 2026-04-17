@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "tsx src/lib/migrate.ts",
+    "db:migrate:latest": "tsx src/lib/migrate-latest.ts",
     "db:seed": "tsx src/lib/seed.ts"
   },
   "dependencies": {

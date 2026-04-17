@@ -50,6 +50,27 @@ export class WatchlistService {
     return WatchlistRepository.remove(userId, entry.show_id);
   }
 
+  static async updateFavorite(userId: number, tmdbId: number, isFavorite: boolean): Promise<boolean> {
+    const entry = await WatchlistRepository.findByUserAndTmdbId(userId, tmdbId);
+    if (!entry) return false;
+    const updated = await WatchlistRepository.updateFavorite(userId, entry.show_id, isFavorite);
+    return updated !== null;
+  }
+
+  static async updateProgress(userId: number, tmdbId: number, season: number, episode: number): Promise<boolean> {
+    const entry = await WatchlistRepository.findByUserAndTmdbId(userId, tmdbId);
+    if (!entry) return false;
+    const updated = await WatchlistRepository.updateProgress(userId, entry.show_id, season, episode);
+    return updated !== null;
+  }
+
+  static async updateRating(userId: number, tmdbId: number, rating: number | null): Promise<boolean> {
+    const entry = await WatchlistRepository.findByUserAndTmdbId(userId, tmdbId);
+    if (!entry) return false;
+    const updated = await WatchlistRepository.updateRating(userId, entry.show_id, rating);
+    return updated !== null;
+  }
+
   static async checkInWatchlist(userId: number, tmdbId: number): Promise<{ inWatchlist: boolean; status?: string }> {
     const entry = await WatchlistRepository.findByUserAndTmdbId(userId, tmdbId);
     if (!entry) return { inWatchlist: false };

@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/Navbar';
+import { ToastProvider } from '@/components/Toast';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -59,9 +60,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg-dark">
-      <Navbar />
-      <main className="flex-1 pt-4">{children}</main>
-    </div>
+    <ToastProvider>
+      <div className="min-h-screen flex flex-col bg-bg-dark">
+        <Navbar />
+        <main className="flex-1 pt-4">{children}</main>
+      </div>
+    </ToastProvider>
   );
 }

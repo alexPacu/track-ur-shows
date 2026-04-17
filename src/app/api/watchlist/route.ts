@@ -73,18 +73,47 @@ export async function PUT(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { tmdbId, status } = body;
+    const { tmdbId, status, rating, current_season, current_episode, is_favorite } = body;
 
-    if (!tmdbId || !status) {
-      return NextResponse.json({ error: 'tmdbId and status are required' }, { status: 400 });
+    if (!tmdbId) {
+      return NextResponse.json({ error: 'tmdbId is required' }, { status: 400 });
     }
 
-    if (!validateStatus(status)) {
-      return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
+    if (status === undefined && rating === undefined && current_season === undefined && current_episode === undefined && is_favorite === undefined) {
+      return NextResponse.json({ error: 'status, rating, progress, or is_favorite is required' }, { status: 400 });
     }
 
-    const updated = await WatchlistService.updateStatus(user.userId, Number(tmdbId), status);
-    if (!updated) return NextResponse.json({ error: 'Item not found in watchlist' }, { status: 404 });
+    if (status !== undefined) {
+      if (!validateStatus(status)) {
+        return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
+      }
+      const updated = await WatchlistService.updateStatus(user.userId, Number(tmdbId), status);
+      if (!updated) return NextResponse.json({ error: 'Item not found in watchlist' }, { status: 404 });
+    }
+
+    if (current_season !== undefined || current_episode !== undefined) {
+      const s = Number(current_season);
+      const e = Number(current_episode);
+      if (!Number.isInteger(s) || !Number.isInteger(e) || s < 1 || e < 1) {
+        return NextResponse.json({ error: 'current_season and current_episode must be positive integers' }, { status: 400 });
+      }
+      const updated = await WatchlistService.updateProgress(user.userId, Number(tmdbId), s, e);
+      if (!updated) return NextResponse.json({ error: 'Item not found in watchlist' }, { status: 404 });
+    }
+
+    if (is_favorite !== undefined) {
+      const updated = await WatchlistService.updateFavorite(user.userId, Number(tmdbId), Boolean(is_favorite));
+      if (!updated) return NextResponse.json({ error: 'Item not found in watchlist' }, { status: 404 });
+    }
+
+    if (rating !== undefined) {
+      const ratingValue = rating === null ? null : Number(rating);
+      if (ratingValue !== null && (isNaN(ratingValue) || ratingValue < 0 || ratingValue > 10)) {
+        return NextResponse.json({ error: 'Rating must be between 0 and 10' }, { status: 400 });
+      }
+      const updated = await WatchlistService.updateRating(user.userId, Number(tmdbId), ratingValue);
+      if (!updated) return NextResponse.json({ error: 'Item not found in watchlist' }, { status: 404 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

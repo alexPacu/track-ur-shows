@@ -1,9 +1,155 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useToast } from '@/components/Toast';
 import Image from 'next/image';
 import Link from 'next/link';
-import { XIcon, StarIcon } from '@/components/Icons';
+import { XIcon, StarIcon, HeartIcon } from '@/components/Icons';
+
+function StarRating({
+  rating,
+  onRate,
+}: {
+  rating?: number | null;
+  onRate: (rating: number | null) => void;
+}) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const currentStars = rating != null ? Math.round(Number(rating) / 2) : 0;
+  const displayStars = hovered ?? currentStars;
+
+  return (
+    <div className="flex items-center gap-0.5" onMouseLeave={() => setHovered(null)}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRate(currentStars === star ? null : star * 2); }}
+          onMouseEnter={() => setHovered(star)}
+          className={`text-sm leading-none transition-colors ${
+            star <= displayStars ? 'text-yellow-400' : 'text-white/20 hover:text-white/40'
+          }`}
+        >
+          ★
+        </button>
+      ))}
+      {rating != null && (
+        <span className="text-xs text-text-muted ml-1">{Number(rating).toFixed(0)}/10</span>
+      )}
+    </div>
+  );
+}
+
+type SeasonInfo = { season_number: number; episode_count: number };
+
+function ProgressPicker({
+  tmdbId,
+  season,
+  episode,
+  onChange,
+}: {
+  tmdbId: number;
+  season?: number | null;
+  episode?: number | null;
+  onChange: (season: number, episode: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [s, setS] = useState('');
+  const [e, setE] = useState('');
+  const [seasons, setSeasons] = useState<SeasonInfo[] | null>(null);
+  const [loadingSeasons, setLoadingSeasons] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const open = async () => {
+    setS(season ? String(season) : '');
+    setE(episode ? String(episode) : '');
+    setError(null);
+    setEditing(true);
+    if (!seasons) {
+      setLoadingSeasons(true);
+      try {
+        const res = await fetch(`/api/shows/${tmdbId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSeasons(
+            (data.data?.seasons ?? [])
+              .filter((s: any) => s.season_number > 0)
+              .map((s: any) => ({ season_number: s.season_number, episode_count: s.episode_count }))
+          );
+        }
+      } finally {
+        setLoadingSeasons(false);
+      }
+    }
+  };
+
+  const blockNonNumeric = (ev: React.KeyboardEvent) => {
+    if (['e', 'E', '+', '-', '.'].includes(ev.key)) ev.preventDefault();
+  };
+
+  const validate = (sn: number, ep: number): string | null => {
+    if (!Number.isInteger(sn) || sn < 1) return 'Season must be a positive number';
+    if (!Number.isInteger(ep) || ep < 1) return 'Episode must be a positive number';
+    if (seasons) {
+      const seasonData = seasons.find((s) => s.season_number === sn);
+      if (!seasonData) return `Season ${sn} doesn't exist (show has ${seasons.length} season${seasons.length !== 1 ? 's' : ''})`;
+      if (ep > seasonData.episode_count) return `S${sn} only has ${seasonData.episode_count} episode${seasonData.episode_count !== 1 ? 's' : ''}`;
+    }
+    return null;
+  };
+
+  const tryCommit = (closeOnInvalid = false) => {
+    const sn = parseInt(s);
+    const ep = parseInt(e);
+    const err = validate(sn, ep);
+    if (err) {
+      if (closeOnInvalid) { setEditing(false); return; }
+      setError(err);
+      return;
+    }
+    onChange(sn, ep);
+    setEditing(false);
+    setError(null);
+  };
+
+  if (!editing) {
+    return (
+      <button
+        onClick={(ev) => { ev.preventDefault(); open(); }}
+        className="text-xs transition-colors text-text-muted hover:text-text-primary"
+      >
+        {season && episode
+          ? <span className="text-text-primary/70">S{season} · E{episode}</span>
+          : <span className="opacity-40">S? · E?</span>}
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-1"
+        onBlur={(ev) => { if (!ev.currentTarget.contains(ev.relatedTarget)) tryCommit(true); }}
+      >
+        <span className="text-text-muted text-xs">S</span>
+        <input
+          type="number" min={1} step={1} value={s}
+          onChange={(ev) => { setS(ev.target.value); setError(null); }}
+          onKeyDown={(ev) => { blockNonNumeric(ev); if (ev.key === 'Enter') tryCommit(); if (ev.key === 'Escape') setEditing(false); }}
+          autoFocus
+          className="w-8 bg-white/10 border border-white/20 rounded text-xs text-center text-text-primary focus:outline-none focus:border-accent-blue/50 py-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        <span className="text-text-muted text-xs">E</span>
+        <input
+          type="number" min={1} step={1} value={e}
+          onChange={(ev) => { setE(ev.target.value); setError(null); }}
+          onKeyDown={(ev) => { blockNonNumeric(ev); if (ev.key === 'Enter') tryCommit(); if (ev.key === 'Escape') setEditing(false); }}
+          className="w-8 bg-white/10 border border-white/20 rounded text-xs text-center text-text-primary focus:outline-none focus:border-accent-blue/50 py-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        {loadingSeasons && <div className="w-3 h-3 border border-white/20 border-t-white/60 rounded-full animate-spin ml-1" />}
+      </div>
+      {error && <p className="text-red-400 text-xs mt-0.5 leading-tight">{error}</p>}
+    </div>
+  );
+}
 
 function WatchlistCard({
   item,
@@ -11,12 +157,18 @@ function WatchlistCard({
   onRemove,
   onCancelConfirm,
   onStatusChange,
+  onRatingChange,
+  onProgressChange,
+  onFavoriteToggle,
 }: {
   item: WatchlistItem;
   isConfirming: boolean;
   onRemove: () => void;
   onCancelConfirm: () => void;
   onStatusChange: (status: string) => void;
+  onRatingChange: (rating: number | null) => void;
+  onProgressChange: (season: number, episode: number) => void;
+  onFavoriteToggle: () => void;
 }) {
   const [imgError, setImgError] = useState(false);
   const href =
@@ -48,17 +200,28 @@ function WatchlistCard({
 
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onFavoriteToggle(); }}
+          className={`absolute top-2 left-2 w-7 h-7 flex items-center justify-center rounded-lg transition-all ${
+            item.is_favorite
+              ? 'opacity-100 text-red-400 bg-black/50'
+              : 'opacity-0 group-hover:opacity-100 text-white/70 hover:text-red-400 bg-black/50'
+          }`}
+        >
+          <HeartIcon filled={item.is_favorite} className="w-4 h-4" />
+        </button>
+
+        <div className={`absolute top-2 right-2 transition-opacity ${isConfirming ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           {isConfirming ? (
             <div className="flex gap-1">
               <button
-                onClick={(e) => { e.preventDefault(); onRemove(); }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(); }}
                 className="px-2 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition"
               >
                 Remove
               </button>
               <button
-                onClick={(e) => { e.preventDefault(); onCancelConfirm(); }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onCancelConfirm(); }}
                 className="w-6 h-6 flex items-center justify-center bg-black/50 hover:bg-black/70 text-white rounded-lg transition"
               >
                 <XIcon className="w-3 h-3" />
@@ -66,7 +229,7 @@ function WatchlistCard({
             </div>
           ) : (
             <button
-              onClick={(e) => { e.preventDefault(); onRemove(); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(); }}
               className="w-7 h-7 flex items-center justify-center bg-black/50 hover:bg-red-500/80 text-white rounded-lg transition"
             >
               <XIcon className="w-4 h-4" />
@@ -80,12 +243,26 @@ function WatchlistCard({
             <span className="text-white text-xs font-semibold">{Number(item.rating).toFixed(1)}</span>
           </div>
         )}
+
+        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="bg-black/60 backdrop-blur-sm rounded-md px-1.5 py-1">
+            <StarRating rating={item.personal_rating} onRate={onRatingChange} />
+          </div>
+        </div>
       </Link>
 
       <div className="mt-2.5 px-0.5">
-        <p className="text-text-primary text-sm font-semibold leading-tight truncate mb-2">{item.title}</p>
+        <p className="text-text-primary text-sm font-semibold leading-tight truncate mb-1.5">{item.title}</p>
+        {item.media_type === 'tv' && (
+          <ProgressPicker
+            tmdbId={item.tmdb_id}
+            season={item.current_season}
+            episode={item.current_episode}
+            onChange={onProgressChange}
+          />
+        )}
         {/* Status pills — visible only on hover */}
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className={`flex gap-1 ${item.media_type === 'tv' ? 'mt-1.5' : ''} opacity-0 group-hover:opacity-100 transition-opacity`}>
           {(['planning_to_watch', 'watching', 'completed'] as const).map((s) => (
             <button
               key={s}
@@ -105,6 +282,14 @@ function WatchlistCard({
   );
 }
 
+const GENRE_NAMES: Record<number, string> = {
+  28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy', 80: 'Crime',
+  99: 'Documentary', 18: 'Drama', 10751: 'Family', 14: 'Fantasy', 36: 'History',
+  27: 'Horror', 9648: 'Mystery', 10749: 'Romance', 878: 'Sci-Fi', 53: 'Thriller',
+  10752: 'War', 37: 'Western', 10759: 'Action & Adventure', 10762: 'Kids',
+  10764: 'Reality', 10765: 'Sci-Fi & Fantasy', 10768: 'War & Politics',
+};
+
 type TabType = 'all' | 'watching' | 'completed' | 'plantowatch';
 
 interface WatchlistItem {
@@ -115,6 +300,11 @@ interface WatchlistItem {
   media_type: 'movie' | 'tv';
   poster_path?: string;
   rating?: number;
+  personal_rating?: number | null;
+  current_season?: number | null;
+  current_episode?: number | null;
+  genres?: number[] | null;
+  is_favorite: boolean;
   status: string;
 }
 
@@ -131,7 +321,26 @@ export default function WatchlistPage() {
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'added' | 'az' | 'za' | 'rating'>('added');
+  const [sortBy, setSortBy] = useState<'added' | 'az' | 'za' | 'rating' | 'myrating'>('added');
+  const [filterType, setFilterType] = useState<'all' | 'movie' | 'tv'>('all');
+  const [filterGenre, setFilterGenre] = useState<number | null>(null);
+  const [filterFavorites, setFilterFavorites] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => { setConfirmingId(null); setFilterGenre(null); }, [activeTab]);
+
+  useEffect(() => {
+    if (confirmingId === null) return;
+    const handleClick = () => setConfirmingId(null);
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setConfirmingId(null); };
+    const timer = setTimeout(() => document.addEventListener('click', handleClick), 0);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('click', handleClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [confirmingId]);
 
   useEffect(() => {
     const load = async () => {
@@ -162,11 +371,76 @@ export default function WatchlistPage() {
         body: JSON.stringify({ tmdbId: item.tmdb_id, status: newStatus }),
       });
       if (!res.ok) throw new Error('Update failed');
+      toast(`Marked as ${STATUS_LABELS[newStatus]}`);
     } catch (e) {
       console.error('Failed to update status:', e);
       setWatchlist((prev) =>
         prev.map((w) => (w.id === item.id ? { ...w, status: item.status } : w))
       );
+      toast('Failed to update status', 'error');
+    }
+  };
+
+  const handleRatingChange = async (item: WatchlistItem, rating: number | null) => {
+    setWatchlist((prev) =>
+      prev.map((w) => (w.id === item.id ? { ...w, personal_rating: rating } : w))
+    );
+    try {
+      const res = await fetch('/api/watchlist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ tmdbId: item.tmdb_id, rating }),
+      });
+      if (!res.ok) throw new Error('Update failed');
+      toast(rating === null ? 'Rating cleared' : 'Rating saved');
+    } catch (e) {
+      console.error('Failed to update rating:', e);
+      setWatchlist((prev) =>
+        prev.map((w) => (w.id === item.id ? { ...w, personal_rating: item.personal_rating } : w))
+      );
+      toast('Failed to save rating', 'error');
+    }
+  };
+
+  const handleFavoriteToggle = async (item: WatchlistItem) => {
+    const newValue = !item.is_favorite;
+    setWatchlist((prev) => prev.map((w) => (w.id === item.id ? { ...w, is_favorite: newValue } : w)));
+    try {
+      const res = await fetch('/api/watchlist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ tmdbId: item.tmdb_id, is_favorite: newValue }),
+      });
+      if (!res.ok) throw new Error('Update failed');
+      toast(newValue ? 'Added to favorites' : 'Removed from favorites');
+    } catch (e) {
+      console.error('Failed to update favorite:', e);
+      setWatchlist((prev) => prev.map((w) => (w.id === item.id ? { ...w, is_favorite: item.is_favorite } : w)));
+      toast('Failed to update favorites', 'error');
+    }
+  };
+
+  const handleProgressChange = async (item: WatchlistItem, season: number, episode: number) => {
+    setWatchlist((prev) =>
+      prev.map((w) => (w.id === item.id ? { ...w, current_season: season, current_episode: episode } : w))
+    );
+    try {
+      const res = await fetch('/api/watchlist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ tmdbId: item.tmdb_id, current_season: season, current_episode: episode }),
+      });
+      if (!res.ok) throw new Error('Update failed');
+      toast('Progress saved');
+    } catch (e) {
+      console.error('Failed to update progress:', e);
+      setWatchlist((prev) =>
+        prev.map((w) => (w.id === item.id ? { ...w, current_season: item.current_season, current_episode: item.current_episode } : w))
+      );
+      toast('Failed to save progress', 'error');
     }
   };
 
@@ -183,11 +457,26 @@ export default function WatchlistPage() {
       });
       if (res.ok) {
         setWatchlist((prev) => prev.filter((w) => w.id !== item.id));
+        toast(`Removed "${item.title}" from watchlist`);
+      } else {
+        toast('Failed to remove from watchlist', 'error');
       }
     } catch (e) {
       console.error('Failed to remove from watchlist:', e);
+      toast('Failed to remove from watchlist', 'error');
     }
   };
+
+  const tabItems = watchlist.filter((item) =>
+    activeTab === 'all' ||
+    (activeTab === 'watching' && item.status === 'watching') ||
+    (activeTab === 'completed' && item.status === 'completed') ||
+    (activeTab === 'plantowatch' && item.status === 'planning_to_watch')
+  );
+
+  const availableGenres = Array.from(
+    new Set(tabItems.flatMap((item) => item.genres ?? []))
+  ).filter((id) => GENRE_NAMES[id]).sort((a, b) => GENRE_NAMES[a].localeCompare(GENRE_NAMES[b]));
 
   const filteredList = watchlist
     .filter((item) => {
@@ -197,12 +486,19 @@ export default function WatchlistPage() {
         (activeTab === 'completed' && item.status === 'completed') ||
         (activeTab === 'plantowatch' && item.status === 'planning_to_watch');
       const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesTab && matchesSearch;
+      const matchesType = filterType === 'all' || item.media_type === filterType;
+      const matchesGenre = filterGenre === null || (item.genres?.includes(filterGenre) ?? false);
+      const matchesFavorite = !filterFavorites || item.is_favorite;
+      return matchesTab && matchesSearch && matchesType && matchesGenre && matchesFavorite;
     })
     .sort((a, b) => {
       if (sortBy === 'az') return a.title.localeCompare(b.title);
       if (sortBy === 'za') return b.title.localeCompare(a.title);
       if (sortBy === 'rating') return (Number(b.rating) || 0) - (Number(a.rating) || 0);
+      if (sortBy === 'myrating') {
+        const diff = (Number(b.personal_rating) || 0) - (Number(a.personal_rating) || 0);
+        return diff !== 0 ? diff : (Number(b.rating) || 0) - (Number(a.rating) || 0);
+      }
       return 0; // 'added' keeps the original order (already sorted by updated_at DESC from API)
     });
 
@@ -222,47 +518,32 @@ export default function WatchlistPage() {
   return (
     <div className="min-h-screen pb-24">
       {/* Header */}
-      <div className="max-w-[1480px] mx-auto px-10 pt-8 pb-10">
-        <h1 className="text-4xl font-bold text-text-primary mb-1">My Watchlist</h1>
-        <p className="text-text-muted">Track what you're watching and what's next</p>
+      <div className="max-w-[1480px] mx-auto px-10 pt-8 pb-6 flex items-center justify-between gap-6">
+        <div>
+          <h1 className="text-4xl font-bold text-text-primary mb-1">My Watchlist</h1>
+          <p className="text-text-muted text-sm">Track what you're watching and what's next</p>
+        </div>
 
-        {/* Stats */}
-        <div className="mt-8 flex gap-4">
-          <div className="flex-1 modern-panel rounded-2xl p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-accent-blue/15 flex items-center justify-center">
-              <span className="text-accent-blue text-lg">▶</span>
-            </div>
-            <div>
-              <p className="text-text-muted text-xs uppercase tracking-wider mb-0.5">Watching</p>
-              <p className="text-2xl font-bold text-accent-blue">{counts.watching}</p>
-            </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="modern-panel rounded-xl px-4 py-2.5 flex items-center gap-2.5">
+            <span className="text-accent-blue text-sm">▶</span>
+            <span className="text-2xl font-bold text-accent-blue">{counts.watching}</span>
+            <span className="text-text-muted text-xs uppercase tracking-wider">Watching</span>
           </div>
-          <div className="flex-1 modern-panel rounded-2xl p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-green-400/15 flex items-center justify-center">
-              <span className="text-green-400 text-lg">✓</span>
-            </div>
-            <div>
-              <p className="text-text-muted text-xs uppercase tracking-wider mb-0.5">Completed</p>
-              <p className="text-2xl font-bold text-green-400">{counts.completed}</p>
-            </div>
+          <div className="modern-panel rounded-xl px-4 py-2.5 flex items-center gap-2.5">
+            <span className="text-green-400 text-sm">✓</span>
+            <span className="text-2xl font-bold text-green-400">{counts.completed}</span>
+            <span className="text-text-muted text-xs uppercase tracking-wider">Completed</span>
           </div>
-          <div className="flex-1 modern-panel rounded-2xl p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-blue-400/15 flex items-center justify-center">
-              <span className="text-blue-300 text-lg">☆</span>
-            </div>
-            <div>
-              <p className="text-text-muted text-xs uppercase tracking-wider mb-0.5">Planned</p>
-              <p className="text-2xl font-bold text-blue-300">{counts.planning}</p>
-            </div>
+          <div className="modern-panel rounded-xl px-4 py-2.5 flex items-center gap-2.5">
+            <span className="text-sky-300 text-sm">☆</span>
+            <span className="text-2xl font-bold text-sky-300">{counts.planning}</span>
+            <span className="text-text-muted text-xs uppercase tracking-wider">Planned</span>
           </div>
-          <div className="flex-1 modern-panel rounded-2xl p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
-              <span className="text-text-muted text-lg">#</span>
-            </div>
-            <div>
-              <p className="text-text-muted text-xs uppercase tracking-wider mb-0.5">Total</p>
-              <p className="text-2xl font-bold text-text-primary">{watchlist.length}</p>
-            </div>
+          <div className="modern-panel rounded-xl px-4 py-2.5 flex items-center gap-2.5">
+            <span className="text-text-muted text-sm">#</span>
+            <span className="text-2xl font-bold text-text-primary">{watchlist.length}</span>
+            <span className="text-text-muted text-xs uppercase tracking-wider">Total</span>
           </div>
         </div>
       </div>
@@ -313,14 +594,72 @@ export default function WatchlistPage() {
               <option value="az">A → Z</option>
               <option value="za">Z → A</option>
               <option value="rating">Top Rated</option>
+              <option value="myrating">My Rating</option>
             </select>
-            {searchQuery && (
+            {(searchQuery || filterType !== 'all' || filterGenre !== null || filterFavorites) && (
               <p className="text-text-muted text-sm whitespace-nowrap">
                 {filteredList.length} result{filteredList.length !== 1 ? 's' : ''}
               </p>
             )}
           </div>
         </div>
+      </div>
+
+      {/* Filters */}
+      <div className="max-w-[1480px] mx-auto px-10 py-3 flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          {(['all', 'movie', 'tv'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setFilterType(t)}
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                filterType === t
+                  ? 'bg-accent-blue text-white'
+                  : 'bg-white/5 text-text-muted hover:bg-white/10 hover:text-text-primary'
+              }`}
+            >
+              {t === 'all' ? 'All' : t === 'movie' ? 'Movies' : 'TV Shows'}
+            </button>
+          ))}
+        </div>
+
+        <div className="w-px h-4 bg-white/10" />
+        <button
+          onClick={() => setFilterFavorites((v) => !v)}
+          className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+            filterFavorites
+              ? 'bg-red-400/15 text-red-400 border border-red-400/30'
+              : 'bg-white/5 text-text-muted hover:bg-white/10 hover:text-text-primary border border-transparent'
+          }`}
+        >
+          <HeartIcon filled={filterFavorites} className="w-3 h-3" />
+          Favorites
+        </button>
+
+        {availableGenres.length > 0 && (
+          <>
+            <div className="w-px h-4 bg-white/10" />
+            <select
+              value={filterGenre ?? ''}
+              onChange={(e) => setFilterGenre(e.target.value === '' ? null : Number(e.target.value))}
+              className="bg-bg-card border border-white/10 rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue/50 transition-colors cursor-pointer"
+            >
+              <option value="">All Genres</option>
+              {availableGenres.map((id) => (
+                <option key={id} value={id}>{GENRE_NAMES[id]}</option>
+              ))}
+            </select>
+          </>
+        )}
+        {(filterGenre !== null || filterType !== 'all' || filterFavorites) && (
+          <button
+            onClick={() => { setFilterGenre(null); setFilterType('all'); setFilterFavorites(false); }}
+            className="w-7 h-7 flex items-center justify-center bg-white/5 hover:bg-white/10 text-text-muted hover:text-text-primary rounded-lg transition-colors"
+            title="Clear filters"
+          >
+            <XIcon className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Grid */}
@@ -333,13 +672,25 @@ export default function WatchlistPage() {
           </div>
         ) : filteredList.length === 0 ? (
           <div className="modern-panel rounded-2xl py-20 px-6 text-center">
-            <p className="text-5xl mb-4">🎬</p>
-            <p className="text-text-primary font-semibold text-lg mb-1">Nothing here yet</p>
-            <p className="text-text-muted text-sm">
-              {activeTab === 'all'
-                ? 'Start adding movies and shows to your watchlist!'
-                : `No ${tabs.find((t) => t.id === activeTab)?.label.toLowerCase()} titles yet.`}
+            <p className="text-5xl mb-4">{searchQuery || filterGenre !== null || filterType !== 'all' || filterFavorites ? '🔍' : '🎬'}</p>
+            <p className="text-text-primary font-semibold text-lg mb-1">
+              {searchQuery ? `No results for "${searchQuery}"` : 'Nothing here yet'}
             </p>
+            <p className="text-text-muted text-sm">
+              {searchQuery || filterGenre !== null || filterType !== 'all' || filterFavorites
+                ? 'Try adjusting your search or filters.'
+                : activeTab === 'all'
+                  ? 'Start adding movies and shows to your watchlist!'
+                  : `No ${tabs.find((t) => t.id === activeTab)?.label.toLowerCase()} titles yet.`}
+            </p>
+            {(filterGenre !== null || filterType !== 'all' || filterFavorites) && (
+              <button
+                onClick={() => { setFilterGenre(null); setFilterType('all'); setFilterFavorites(false); }}
+                className="mt-4 text-xs text-accent-blue hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
@@ -351,6 +702,9 @@ export default function WatchlistPage() {
                 onRemove={() => handleRemove(item)}
                 onCancelConfirm={() => setConfirmingId(null)}
                 onStatusChange={(status) => handleStatusChange(item, status)}
+                onRatingChange={(rating) => handleRatingChange(item, rating)}
+                onProgressChange={(s, e) => handleProgressChange(item, s, e)}
+                onFavoriteToggle={() => handleFavoriteToggle(item)}
               />
             ))}
           </div>

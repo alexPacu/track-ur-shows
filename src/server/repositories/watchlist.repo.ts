@@ -64,10 +64,48 @@ export class WatchlistRepository {
 
   static async updateStatus(userId: number, showId: number, status: string): Promise<UserLibraryEntry | null> {
     return queryOne<UserLibraryEntry>(
-      `UPDATE user_library SET status = $3, updated_at = CURRENT_TIMESTAMP
+      `UPDATE user_library
+       SET status = $3,
+           updated_at = CURRENT_TIMESTAMP,
+           date_started = CASE
+             WHEN $3 = 'watching' AND date_started IS NULL THEN CURRENT_DATE
+             ELSE date_started
+           END,
+           date_completed = CASE
+             WHEN $3 = 'completed' THEN CURRENT_DATE
+             WHEN $3 != 'completed' THEN NULL
+             ELSE date_completed
+           END
        WHERE user_id = $1 AND show_id = $2
        RETURNING *`,
       [userId, showId, status]
+    );
+  }
+
+  static async updateFavorite(userId: number, showId: number, isFavorite: boolean): Promise<UserLibraryEntry | null> {
+    return queryOne<UserLibraryEntry>(
+      `UPDATE user_library SET is_favorite = $3
+       WHERE user_id = $1 AND show_id = $2
+       RETURNING *`,
+      [userId, showId, isFavorite]
+    );
+  }
+
+  static async updateProgress(userId: number, showId: number, season: number, episode: number): Promise<UserLibraryEntry | null> {
+    return queryOne<UserLibraryEntry>(
+      `UPDATE user_library SET current_season = $3, current_episode = $4, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND show_id = $2
+       RETURNING *`,
+      [userId, showId, season, episode]
+    );
+  }
+
+  static async updateRating(userId: number, showId: number, rating: number | null): Promise<UserLibraryEntry | null> {
+    return queryOne<UserLibraryEntry>(
+      `UPDATE user_library SET personal_rating = $3, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND show_id = $2
+       RETURNING *`,
+      [userId, showId, rating]
     );
   }
 

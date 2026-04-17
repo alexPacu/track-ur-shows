@@ -6,6 +6,7 @@ export interface User {
   username: string;
   password_hash: string;
   profile_picture_url?: string;
+  background_image_url?: string;
   bio?: string;
   created_at: Date;
   updated_at: Date;
@@ -75,6 +76,10 @@ export class UserRepository {
     if (data.profile_picture_url !== undefined) {
       updates.push(`profile_picture_url = $${paramCount++}`);
       values.push(data.profile_picture_url);
+    }
+    if (data.background_image_url !== undefined) {
+      updates.push(`background_image_url = $${paramCount++}`);
+      values.push(data.background_image_url);
     }
     if (data.bio !== undefined) {
       updates.push(`bio = $${paramCount++}`);
