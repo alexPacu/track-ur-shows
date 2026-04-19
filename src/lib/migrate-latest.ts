@@ -23,14 +23,13 @@ async function migrateLatest() {
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
     try {
       await pool.query(sql);
-      console.log(`✓ ${file}`);
+      console.log(`done ${file}`);
     } catch (err) {
-      console.error(`✗ ${file}:`, err);
+      console.error(`not done ${file}:`, err);
       process.exit(1);
     }
   }
 
-  console.log('All migrations applied.');
   process.exit(0);
 }
 

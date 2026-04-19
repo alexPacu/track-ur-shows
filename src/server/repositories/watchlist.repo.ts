@@ -1,5 +1,16 @@
 import { queryOne, queryMany, query } from '@/lib/db';
 
+let _libraryColumnsEnsured = false;
+async function ensureLibraryColumns() {
+  if (_libraryColumnsEnsured) return;
+  await query(`ALTER TABLE user_library ADD COLUMN IF NOT EXISTS date_started DATE`);
+  await query(`ALTER TABLE user_library ADD COLUMN IF NOT EXISTS date_completed DATE`);
+  await query(`ALTER TABLE user_library ADD COLUMN IF NOT EXISTS hours_watched DECIMAL(10,2) DEFAULT 0`);
+  await query(`ALTER TABLE user_library ADD COLUMN IF NOT EXISTS times_rewatched INTEGER DEFAULT 0`);
+  await query(`ALTER TABLE user_library ADD COLUMN IF NOT EXISTS notes TEXT`);
+  _libraryColumnsEnsured = true;
+}
+
 export interface UserLibraryEntry {
   id: number;
   user_id: number;
@@ -51,6 +62,7 @@ export class WatchlistRepository {
   }
 
   static async add(userId: number, showId: number, status: string = 'planning_to_watch'): Promise<UserLibraryEntry> {
+    await ensureLibraryColumns();
     const result = await queryOne<UserLibraryEntry>(
       `INSERT INTO user_library (user_id, show_id, status)
        VALUES ($1, $2, $3)
@@ -63,31 +75,41 @@ export class WatchlistRepository {
   }
 
   static async updateStatus(userId: number, showId: number, status: string): Promise<UserLibraryEntry | null> {
+    await ensureLibraryColumns();
     return queryOne<UserLibraryEntry>(
       `UPDATE user_library
        SET status = $3,
            updated_at = CURRENT_TIMESTAMP,
            date_started = CASE
-             WHEN $3 = 'watching' AND date_started IS NULL THEN CURRENT_DATE
+             WHEN $4 = 'watching' AND date_started IS NULL THEN CURRENT_DATE
              ELSE date_started
            END,
            date_completed = CASE
-             WHEN $3 = 'completed' THEN CURRENT_DATE
-             WHEN $3 != 'completed' THEN NULL
+             WHEN $4 = 'completed' THEN CURRENT_DATE
+             WHEN $4 != 'completed' THEN NULL
              ELSE date_completed
            END
        WHERE user_id = $1 AND show_id = $2
        RETURNING *`,
-      [userId, showId, status]
+      [userId, showId, status, status]
     );
   }
 
   static async updateFavorite(userId: number, showId: number, isFavorite: boolean): Promise<UserLibraryEntry | null> {
     return queryOne<UserLibraryEntry>(
-      `UPDATE user_library SET is_favorite = $3
+      `UPDATE user_library SET is_favorite = $3, updated_at = CURRENT_TIMESTAMP
        WHERE user_id = $1 AND show_id = $2
        RETURNING *`,
       [userId, showId, isFavorite]
+    );
+  }
+
+  static async clearProgress(userId: number, showId: number): Promise<UserLibraryEntry | null> {
+    return queryOne<UserLibraryEntry>(
+      `UPDATE user_library SET current_season = NULL, current_episode = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND show_id = $2
+       RETURNING *`,
+      [userId, showId]
     );
   }
 
@@ -106,6 +128,15 @@ export class WatchlistRepository {
        WHERE user_id = $1 AND show_id = $2
        RETURNING *`,
       [userId, showId, rating]
+    );
+  }
+
+  static async getLastSeason(showId: number): Promise<{ season_number: number; episode_count: number } | null> {
+    return queryOne<{ season_number: number; episode_count: number }>(
+      `SELECT season_number, episode_count FROM seasons
+       WHERE show_id = $1 AND episode_count > 0
+       ORDER BY season_number DESC LIMIT 1`,
+      [showId]
     );
   }
 

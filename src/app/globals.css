@@ -79,20 +79,25 @@ body {
   box-shadow: 0 10px 26px rgb(0 0 0 / 35%);
 }
 
+* {
+  scrollbar-color: rgb(137 207 240 / 45%) transparent;
+  scrollbar-width: thin;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background-color: rgb(10 10 10);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgb(137 207 240);
-  border-radius: 12px;
+  background: rgb(137 207 240 / 45%);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(96, 165, 250);
+  background: rgb(137 207 240 / 75%);
 }

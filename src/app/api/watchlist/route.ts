@@ -87,8 +87,11 @@ export async function PUT(req: NextRequest) {
       if (!validateStatus(status)) {
         return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
       }
-      const updated = await WatchlistService.updateStatus(user.userId, Number(tmdbId), status);
-      if (!updated) return NextResponse.json({ error: 'Item not found in watchlist' }, { status: 404 });
+      const result = await WatchlistService.updateStatus(user.userId, Number(tmdbId), status);
+      if (!result.success) return NextResponse.json({ error: 'Item not found in watchlist' }, { status: 404 });
+      if (result.current_season !== undefined) {
+        return NextResponse.json({ success: true, current_season: result.current_season, current_episode: result.current_episode });
+      }
     }
 
     if (current_season !== undefined || current_episode !== undefined) {

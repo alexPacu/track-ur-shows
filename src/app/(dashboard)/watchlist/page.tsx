@@ -370,7 +370,16 @@ export default function WatchlistPage() {
         credentials: 'include',
         body: JSON.stringify({ tmdbId: item.tmdb_id, status: newStatus }),
       });
-      if (!res.ok) throw new Error('Update failed');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || 'Update failed');
+      }
+      const data = await res.json();
+      if (data.current_season !== undefined) {
+        setWatchlist((prev) =>
+          prev.map((w) => w.id === item.id ? { ...w, current_season: data.current_season, current_episode: data.current_episode } : w)
+        );
+      }
       toast(`Marked as ${STATUS_LABELS[newStatus]}`);
     } catch (e) {
       console.error('Failed to update status:', e);

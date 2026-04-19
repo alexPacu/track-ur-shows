@@ -4,10 +4,8 @@ import { UserRepository } from '@/server/repositories/user.repo';
 import { query, queryOne } from '@/lib/db';
 
 async function ensureColumns() {
-  await query(`
-    ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS background_image_url TEXT
-  `);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS background_image_url TEXT`);
+  await query(`ALTER TABLE shows ADD COLUMN IF NOT EXISTS total_episodes INTEGER`);
   await query(`
     DO $$
     BEGIN
@@ -32,28 +30,48 @@ export async function GET(req: NextRequest) {
     const profile = await UserRepository.findById(user.userId);
     if (!profile) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const stats = await queryOne<{
-      total: string;
-      watching: string;
-      completed: string;
-      planned: string;
-      movies: string;
-      tv_shows: string;
-      avg_personal_rating: string | null;
-    }>(
-      `SELECT
-        COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE ul.status = 'watching') AS watching,
-        COUNT(*) FILTER (WHERE ul.status = 'completed') AS completed,
-        COUNT(*) FILTER (WHERE ul.status = 'planning_to_watch') AS planned,
-        COUNT(*) FILTER (WHERE s.media_type = 'movie') AS movies,
-        COUNT(*) FILTER (WHERE s.media_type = 'tv') AS tv_shows,
-        ROUND(AVG(ul.personal_rating) FILTER (WHERE ul.personal_rating IS NOT NULL), 1) AS avg_personal_rating
-       FROM user_library ul
-       JOIN shows s ON s.id = ul.show_id
-       WHERE ul.user_id = $1`,
-      [user.userId]
-    );
+    const [stats, hoursRow] = await Promise.all([
+      queryOne<{
+        total: string;
+        watching: string;
+        completed: string;
+        planned: string;
+        movies: string;
+        tv_shows: string;
+        avg_personal_rating: string | null;
+      }>(
+        `SELECT
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE ul.status = 'watching') AS watching,
+          COUNT(*) FILTER (WHERE ul.status = 'completed') AS completed,
+          COUNT(*) FILTER (WHERE ul.status = 'planning_to_watch') AS planned,
+          COUNT(*) FILTER (WHERE s.media_type = 'movie') AS movies,
+          COUNT(*) FILTER (WHERE s.media_type = 'tv') AS tv_shows,
+          ROUND(AVG(ul.personal_rating) FILTER (WHERE ul.personal_rating IS NOT NULL), 1) AS avg_personal_rating
+         FROM user_library ul
+         JOIN shows s ON s.id = ul.show_id
+         WHERE ul.user_id = $1`,
+        [user.userId]
+      ),
+      queryOne<{ total_minutes: string }>(
+        `SELECT COALESCE(SUM(
+           CASE
+             WHEN s.media_type = 'movie' THEN COALESCE(s.runtime, 0)
+             WHEN s.media_type = 'tv' THEN
+               COALESCE(s.runtime, 45) * COALESCE(
+                 s.total_episodes,
+                 (SELECT SUM(se.episode_count) FROM seasons se WHERE se.show_id = s.id),
+                 0
+               )
+             ELSE 0
+           END
+         ), 0) AS total_minutes
+         FROM user_library ul
+         JOIN shows s ON s.id = ul.show_id
+         WHERE ul.user_id = $1 AND ul.status = 'completed'`,
+        [user.userId]
+      ),
+    ]);
 
     return NextResponse.json({
       success: true,
@@ -74,6 +92,7 @@ export async function GET(req: NextRequest) {
         movies: Number(stats?.movies ?? 0),
         tv_shows: Number(stats?.tv_shows ?? 0),
         avg_personal_rating: stats?.avg_personal_rating != null ? Number(stats.avg_personal_rating) : null,
+        total_minutes_watched: Number(hoursRow?.total_minutes ?? 0),
       },
     });
   } catch (error) {

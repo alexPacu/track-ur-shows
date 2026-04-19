@@ -104,6 +104,10 @@ export class MovieService {
         runtime: movieDetails.runtime,
       });
 
+      if (movieDetails.watch_providers && Object.keys(movieDetails.watch_providers).length > 0) {
+        await ShowRepository.upsertProviders(cached.id, movieDetails.watch_providers);
+      }
+
       return {
         ...movieDetails,
         db_id: cached.id,
@@ -200,6 +204,10 @@ export class MovieService {
       const showDetails = await TMDBService.getTVShowDetails(showId);
 
       const genres = showDetails.genres?.map((g: any) => g.id) || [];
+      const episodeRuntime = Array.isArray(showDetails.episode_run_time) && showDetails.episode_run_time.length > 0
+        ? showDetails.episode_run_time[0]
+        : undefined;
+
       const cached = await ShowRepository.findOrCreateByTmdbId(showId, {
         title: showDetails.name,
         description: showDetails.overview,
@@ -211,7 +219,13 @@ export class MovieService {
           : undefined,
         poster_path: showDetails.poster_path,
         backdrop_path: showDetails.backdrop_path,
+        runtime: episodeRuntime,
+        total_episodes: showDetails.number_of_episodes ?? undefined,
       });
+
+      if (showDetails.watch_providers && Object.keys(showDetails.watch_providers).length > 0) {
+        await ShowRepository.upsertProviders(cached.id, showDetails.watch_providers);
+      }
 
       return {
         ...showDetails,

@@ -1,4 +1,4 @@
-import { queryOne, queryMany } from '@/lib/db';
+import { queryOne, queryMany, query } from '@/lib/db';
 
 export interface Show {
   id: number;
@@ -122,6 +122,52 @@ export class ShowRepository {
        LIMIT $1`,
       [limit]
     );
+  }
+
+  static async upsertProviders(showId: number, watchProviders: Record<string, any>): Promise<void> {
+    const TYPE_ORDER = ['flatrate', 'buy', 'rent'] as const;
+
+    // collecting providers
+    const providerMap = new Map<number, { name: string; logoPath: string | null; type: string }>();
+    const links: { tmdbProviderId: number; region: string; type: string }[] = [];
+
+    for (const [region, data] of Object.entries(watchProviders)) {
+      for (const type of TYPE_ORDER) {
+        for (const p of ((data as any)[type] || [])) {
+          if (!providerMap.has(p.provider_id)) {
+            providerMap.set(p.provider_id, { name: p.provider_name, logoPath: p.logo_path ?? null, type });
+          }
+          links.push({ tmdbProviderId: p.provider_id, region, type });
+        }
+      }
+    }
+
+    if (providerMap.size === 0) return;
+
+    const dbIds = new Map<number, number>();
+    for (const [tmdbProviderId, info] of providerMap) {
+      const row = await queryOne<{ id: number }>(
+        `INSERT INTO watch_providers (tmdb_provider_id, name, logo_path, provider_type)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (tmdb_provider_id) DO UPDATE SET
+           name = EXCLUDED.name,
+           logo_path = COALESCE(EXCLUDED.logo_path, watch_providers.logo_path)
+         RETURNING id`,
+        [tmdbProviderId, info.name, info.logoPath, info.type]
+      );
+      if (row) dbIds.set(tmdbProviderId, row.id);
+    }
+
+    for (const link of links) {
+      const dbId = dbIds.get(link.tmdbProviderId);
+      if (!dbId) continue;
+      await query(
+        `INSERT INTO show_watch_providers (show_id, provider_id, region, provider_type)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (show_id, provider_id, region, provider_type) DO NOTHING`,
+        [showId, dbId, link.region, link.type]
+      );
+    }
   }
 
   static async update(
