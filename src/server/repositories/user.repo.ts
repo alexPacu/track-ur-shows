@@ -7,7 +7,6 @@ export interface User {
   password_hash: string;
   profile_picture_url?: string;
   background_image_url?: string;
-  bio?: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -80,10 +79,6 @@ export class UserRepository {
     if (data.background_image_url !== undefined) {
       updates.push(`background_image_url = $${paramCount++}`);
       values.push(data.background_image_url);
-    }
-    if (data.bio !== undefined) {
-      updates.push(`bio = $${paramCount++}`);
-      values.push(data.bio);
     }
 
     if (updates.length === 0) return this.findById(id);

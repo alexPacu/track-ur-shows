@@ -1,16 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-bg-dark: #1a1a1a;
-  --color-bg-deep: #111827;
-  --color-bg-card: #242424;
-  --color-bg-soft: #1f2937;
+  --color-bg-dark: #111520;
+  --color-bg-deep: #0c0e14;
+  --color-bg-card: #171c28;
+  --color-bg-soft: #1c2236;
   --color-accent-blue: #89CFF0;
   --color-accent-blue-strong: #60a5fa;
-  --color-text-primary: #f5f5f5;
-  --color-text-muted: #b0b0b0;
-  --color-input-bg: #2a2a2a;
-  --color-input-border: #3a3a3a;
+  --color-text-primary: #eef2ff;
+  --color-text-muted: #8899aa;
+  --color-input-bg: #0f1320;
+  --color-input-border: #253050;
 }
 
 @layer base {
@@ -30,23 +31,25 @@ html {
 
 body {
   background:
-    radial-gradient(circle at 10% 10%, rgb(137 207 240 / 10%) 0%, transparent 42%),
-    radial-gradient(circle at 85% 15%, rgb(96 165 250 / 10%) 0%, transparent 35%),
-    linear-gradient(180deg, rgb(17 24 39) 0%, rgb(26 26 26) 35%, rgb(26 26 26) 100%);
-  color: rgb(245 245 245);
-  font-family: system-ui, -apple-system, sans-serif;
-  min-height: 100vh;
+    radial-gradient(circle at 8% 12%, rgb(137 207 240 / 10%) 0%, transparent 44%),
+    radial-gradient(circle at 88% 10%, rgb(96 165 250 / 8%) 0%, transparent 38%),
+    radial-gradient(circle at 50% 90%, rgb(137 207 240 / 5%) 0%, transparent 50%),
+    linear-gradient(180deg, rgb(12 14 20) 0%, rgb(17 21 32) 40%, rgb(17 21 32) 100%);
+  color: rgb(238 242 255);
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  min-height: 100dvh;
 }
 
 @layer base {
   input, textarea, select {
-    background-color: rgb(42 42 42);
-    border-color: rgb(58 58 58);
-    color: rgb(245 245 245);
+    background-color: rgb(15 19 32);
+    border-color: rgb(37 48 80);
+    color: rgb(238 242 255);
+    font-family: 'Outfit', system-ui, sans-serif;
   }
 
   input::placeholder, textarea::placeholder {
-    color: rgb(176 176 176);
+    color: rgb(136 153 170 / 70%);
   }
 
   a {
@@ -58,41 +61,56 @@ body {
   button {
     transition-property: all;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 150ms;
+    transition-duration: 200ms;
+    font-family: 'Outfit', system-ui, sans-serif;
   }
 
   :focus-visible {
-    outline: 2px solid rgb(137 207 240);
+    outline: 2px solid rgb(137 207 240 / 70%);
     outline-offset: 2px;
   }
 }
 
 .glass-card {
-  background-color: rgb(36 36 36 / 72%);
-  border: 1px solid rgb(137 207 240 / 20%);
-  backdrop-filter: blur(12px);
+  background-color: rgb(23 28 40 / 80%);
+  border: 1px solid rgb(137 207 240 / 15%);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 24px rgb(0 0 0 / 40%), inset 0 1px 0 rgb(137 207 240 / 8%);
 }
 
 .modern-panel {
-  background: linear-gradient(160deg, rgb(36 36 36 / 90%) 0%, rgb(31 41 55 / 80%) 100%);
-  border: 1px solid rgb(137 207 240 / 25%);
-  box-shadow: 0 10px 26px rgb(0 0 0 / 35%);
+  background: linear-gradient(160deg, rgb(23 28 40 / 96%) 0%, rgb(28 34 54 / 92%) 100%);
+  border: 1px solid rgb(137 207 240 / 15%);
+  box-shadow: 0 10px 40px rgb(0 0 0 / 50%), inset 0 1px 0 rgb(137 207 240 / 6%);
+}
+
+.auth-panel {
+  background: linear-gradient(145deg, rgb(23 28 40) 0%, rgb(17 21 32) 100%);
+  border: 1px solid rgb(137 207 240 / 18%);
+  box-shadow:
+    0 32px 72px rgb(0 0 0 / 65%),
+    inset 0 1px 0 rgb(137 207 240 / 12%);
+}
+
+* {
+  scrollbar-color: rgb(137 207 240 / 30%) transparent;
+  scrollbar-width: thin;
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background-color: rgb(10 10 10);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgb(137 207 240);
-  border-radius: 12px;
+  background: rgb(137 207 240 / 30%);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(96, 165, 250);
+  background: rgb(137 207 240 / 55%);
 }

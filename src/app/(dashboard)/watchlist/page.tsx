@@ -370,7 +370,16 @@ export default function WatchlistPage() {
         credentials: 'include',
         body: JSON.stringify({ tmdbId: item.tmdb_id, status: newStatus }),
       });
-      if (!res.ok) throw new Error('Update failed');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || 'Update failed');
+      }
+      const data = await res.json();
+      if (data.current_season !== undefined) {
+        setWatchlist((prev) =>
+          prev.map((w) => w.id === item.id ? { ...w, current_season: data.current_season, current_episode: data.current_episode } : w)
+        );
+      }
       toast(`Marked as ${STATUS_LABELS[newStatus]}`);
     } catch (e) {
       console.error('Failed to update status:', e);
@@ -518,45 +527,41 @@ export default function WatchlistPage() {
   return (
     <div className="min-h-screen pb-24">
       {/* Header */}
-      <div className="max-w-[1480px] mx-auto px-10 pt-8 pb-6 flex items-center justify-between gap-6">
+      <div className="max-w-[1480px] mx-auto px-10 pt-10 pb-8 flex items-center justify-between gap-6">
         <div>
-          <h1 className="text-4xl font-bold text-text-primary mb-1">My Watchlist</h1>
+          <h1 className="text-[2.6rem] font-bold text-text-primary mb-1.5 tracking-tight">My Watchlist</h1>
           <p className="text-text-muted text-sm">Track what you're watching and what's next</p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="modern-panel rounded-xl px-4 py-2.5 flex items-center gap-2.5">
-            <span className="text-accent-blue text-sm">▶</span>
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="modern-panel rounded-xl px-5 py-3 flex flex-col items-center gap-0.5 min-w-[80px]">
             <span className="text-2xl font-bold text-accent-blue">{counts.watching}</span>
-            <span className="text-text-muted text-xs uppercase tracking-wider">Watching</span>
+            <span className="text-text-muted text-[10px] uppercase tracking-widest font-medium">Watching</span>
           </div>
-          <div className="modern-panel rounded-xl px-4 py-2.5 flex items-center gap-2.5">
-            <span className="text-green-400 text-sm">✓</span>
+          <div className="modern-panel rounded-xl px-5 py-3 flex flex-col items-center gap-0.5 min-w-[80px]">
             <span className="text-2xl font-bold text-green-400">{counts.completed}</span>
-            <span className="text-text-muted text-xs uppercase tracking-wider">Completed</span>
+            <span className="text-text-muted text-[10px] uppercase tracking-widest font-medium">Done</span>
           </div>
-          <div className="modern-panel rounded-xl px-4 py-2.5 flex items-center gap-2.5">
-            <span className="text-sky-300 text-sm">☆</span>
+          <div className="modern-panel rounded-xl px-5 py-3 flex flex-col items-center gap-0.5 min-w-[80px]">
             <span className="text-2xl font-bold text-sky-300">{counts.planning}</span>
-            <span className="text-text-muted text-xs uppercase tracking-wider">Planned</span>
+            <span className="text-text-muted text-[10px] uppercase tracking-widest font-medium">Planned</span>
           </div>
-          <div className="modern-panel rounded-xl px-4 py-2.5 flex items-center gap-2.5">
-            <span className="text-text-muted text-sm">#</span>
+          <div className="modern-panel rounded-xl px-5 py-3 flex flex-col items-center gap-0.5 min-w-[80px]">
             <span className="text-2xl font-bold text-text-primary">{watchlist.length}</span>
-            <span className="text-text-muted text-xs uppercase tracking-wider">Total</span>
+            <span className="text-text-muted text-[10px] uppercase tracking-widest font-medium">Total</span>
           </div>
         </div>
       </div>
 
       {/* Tabs + toolbar */}
-      <div className="border-y border-white/5 bg-white/[0.02]">
+      <div className="border-y border-white/[0.05] bg-bg-card/30">
         <div className="max-w-[1480px] mx-auto px-10 flex items-center justify-between gap-4">
-          <div className="flex gap-1">
+          <div className="flex gap-0">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-3.5 px-5 text-sm font-semibold whitespace-nowrap border-b-2 transition-all ${
+                className={`py-3.5 px-5 text-sm font-medium whitespace-nowrap border-b-2 transition-all ${
                   activeTab === tab.id
                     ? 'border-accent-blue text-accent-blue'
                     : 'border-transparent text-text-muted hover:text-text-primary'
@@ -564,8 +569,8 @@ export default function WatchlistPage() {
               >
                 {tab.label}
                 {tab.count > 0 && (
-                  <span className={`ml-2 text-xs rounded-full px-1.5 py-0.5 ${
-                    activeTab === tab.id ? 'bg-accent-blue/20 text-accent-blue' : 'bg-white/5 text-text-muted'
+                  <span className={`ml-2 text-[11px] rounded-md px-1.5 py-0.5 font-semibold ${
+                    activeTab === tab.id ? 'bg-accent-blue/15 text-accent-blue' : 'bg-white/[0.06] text-text-muted'
                   }`}>
                     {tab.count}
                   </span>
@@ -581,20 +586,20 @@ export default function WatchlistPage() {
                 placeholder="Search your list..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-72 bg-bg-card border border-white/10 rounded-xl px-4 py-2 pl-9 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue/50 transition-colors"
+                className="w-64 bg-bg-deep/60 border border-white/[0.07] rounded-full px-4 py-2 pl-9 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue/40 focus:ring-2 focus:ring-accent-blue/12 transition-all"
               />
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm">⌕</span>
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted text-sm">⌕</span>
             </div>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              className="bg-bg-card border border-white/10 rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue/50 transition-colors cursor-pointer"
+              className="bg-bg-deep/60 border border-white/[0.07] rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue/40 transition-colors cursor-pointer"
             >
-              <option value="added">Recently Added</option>
+              <option value="added">Recently added</option>
               <option value="az">A → Z</option>
               <option value="za">Z → A</option>
-              <option value="rating">Top Rated</option>
-              <option value="myrating">My Rating</option>
+              <option value="rating">Top rated</option>
+              <option value="myrating">My rating</option>
             </select>
             {(searchQuery || filterType !== 'all' || filterGenre !== null || filterFavorites) && (
               <p className="text-text-muted text-sm whitespace-nowrap">

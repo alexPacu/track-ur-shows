@@ -44,7 +44,7 @@ export class TMDBService {
   static async getMovieDetails(movieId: number) {
     try {
       const movie = (await this.client.getMovieDetails(movieId, {
-        appendToResponse: ['videos', 'credits', 'images', 'watch_providers'],
+        appendToResponse: ['videos', 'credits', 'images', 'watch/providers'],
       })) as any;
 
       return {
@@ -56,7 +56,7 @@ export class TMDBService {
         credits: movie.credits || { cast: [], crew: [] },
         videos: movie.videos?.results || [],
         images: movie.images || { backdrops: [], posters: [], logos: [] },
-        watch_providers: movie.watch?.providers || {},
+        watch_providers: (movie['watch/providers'] as any)?.results || {},
       };
     } catch (error) {
       console.error('TMDBService.getMovieDetails error:', error);
@@ -67,7 +67,7 @@ export class TMDBService {
   static async getTVShowDetails(seriesId: number) {
     try {
       const show = (await this.client.getTVShowDetails(seriesId, {
-        appendToResponse: ['videos', 'credits', 'images', 'watch_providers'],
+        appendToResponse: ['videos', 'credits', 'images', 'watch/providers'],
       })) as any;
 
       return {
@@ -79,7 +79,7 @@ export class TMDBService {
         credits: show.credits || { cast: [], crew: [] },
         videos: show.videos?.results || [],
         images: show.images || { backdrops: [], posters: [], logos: [] },
-        watch_providers: show.watch?.providers || {},
+        watch_providers: (show['watch/providers'] as any)?.results || {},
       };
     } catch (error) {
       console.error('TMDBService.getTVShowDetails error:', error);

@@ -1,5 +1,6 @@
-import { ShowRepository } from '@/server/repositories/movie.repo';
+import { ShowRepository, SeasonRepository } from '@/server/repositories/movie.repo';
 import { WatchlistRepository, UserLibraryEntry, UserLibraryWithShow } from '@/server/repositories/watchlist.repo';
+import { TMDBService } from './tmdb.service';
 
 export class WatchlistService {
   static async getWatchlist(userId: number): Promise<UserLibraryWithShow[]> {
@@ -37,11 +38,49 @@ export class WatchlistService {
     return WatchlistRepository.add(userId, show.id, status);
   }
 
-  static async updateStatus(userId: number, tmdbId: number, status: string): Promise<boolean> {
+  static async updateStatus(userId: number, tmdbId: number, status: string): Promise<{ success: boolean; current_season?: number; current_episode?: number }> {
     const entry = await WatchlistRepository.findByUserAndTmdbId(userId, tmdbId);
-    if (!entry) return false;
+    if (!entry) return { success: false };
     const updated = await WatchlistRepository.updateStatus(userId, entry.show_id, status);
-    return updated !== null;
+    if (!updated) return { success: false };
+
+    if (status !== 'completed' && entry.media_type === 'tv') {
+      await WatchlistRepository.clearProgress(userId, entry.show_id);
+      return { success: true, current_season: null as any, current_episode: null as any };
+    }
+
+    if (status === 'completed' && entry.media_type === 'tv') {
+      let lastSeason = await WatchlistRepository.getLastSeason(entry.show_id);
+
+      if (!lastSeason) {
+        try {
+          const showDetails = await TMDBService.getTVShowDetails(tmdbId);
+          const seasons = ((showDetails as any).seasons || []).filter((s: any) => s.season_number > 0 && s.episode_count > 0);
+          if (seasons.length > 0) {
+            await Promise.all(
+              seasons.map((s: any) =>
+                SeasonRepository.findOrCreate(entry.show_id, s.season_number, {
+                  episode_count: s.episode_count,
+                  air_date: s.air_date ? new Date(s.air_date) : undefined,
+                  poster_path: s.poster_path,
+                })
+              )
+            );
+            const last = seasons[seasons.length - 1];
+            lastSeason = { season_number: last.season_number, episode_count: last.episode_count };
+          }
+        } catch {
+          // TMDB unavailable, proceed without setting progress
+        }
+      }
+
+      if (lastSeason) {
+        await WatchlistRepository.updateProgress(userId, entry.show_id, lastSeason.season_number, lastSeason.episode_count);
+        return { success: true, current_season: lastSeason.season_number, current_episode: lastSeason.episode_count };
+      }
+    }
+
+    return { success: true };
   }
 
   static async removeFromWatchlist(userId: number, tmdbId: number): Promise<boolean> {

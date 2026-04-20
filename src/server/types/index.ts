@@ -11,7 +11,6 @@ export interface UserData {
   email: string;
   username: string;
   profile_picture_url?: string;
-  bio?: string;
   created_at: Date;
   updated_at: Date;
 }
