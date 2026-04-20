@@ -81,7 +81,6 @@ export async function GET(req: NextRequest) {
         email: profile.email,
         profile_picture_url: profile.profile_picture_url ?? null,
         background_image_url: profile.background_image_url ?? null,
-        bio: profile.bio ?? null,
         created_at: profile.created_at,
       },
       stats: {

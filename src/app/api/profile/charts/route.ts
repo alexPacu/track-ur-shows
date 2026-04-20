@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
     const user = extractUserFromRequest(req);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const [genreRows, providerRows, activityRows, statusRows, favoriteRows, ratingRows] = await Promise.all([
+    const [genreRows, providerRows, activityRows, statusRows, favoriteRows, ratingRows, heatmapRows] = await Promise.all([
       queryMany<{ genre_id: string; count: string }>(
         `SELECT genre_id, COUNT(*) as count
          FROM user_library ul
@@ -79,6 +79,14 @@ export async function GET(req: NextRequest) {
          ORDER BY rating`,
         [user.userId]
       ),
+      queryMany<{ day: string; count: string }>(
+        `SELECT DATE(created_at)::text AS day, COUNT(*) AS count
+         FROM activity_log
+         WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '365 days'
+         GROUP BY DATE(created_at)
+         ORDER BY day`,
+        [user.userId]
+      ),
     ]);
 
     return NextResponse.json({
@@ -89,6 +97,7 @@ export async function GET(req: NextRequest) {
       statuses: statusRows.map((r) => ({ status: r.status, count: Number(r.count) })),
       favorites: favoriteRows,
       ratingDistribution: ratingRows.map((r) => ({ rating: Number(r.rating), count: Number(r.count) })),
+      heatmap: heatmapRows.map((r) => ({ day: r.day, count: Number(r.count) })),
     });
   } catch (error) {
     return NextResponse.json(

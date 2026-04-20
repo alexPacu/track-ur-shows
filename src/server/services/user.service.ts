@@ -87,7 +87,6 @@ export class UserService {
       email: user.email,
       username: user.username,
       profile_picture_url: user.profile_picture_url,
-      bio: user.bio,
       created_at: user.created_at,
     };
   }

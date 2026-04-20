@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useToast } from '@/components/Toast';
 
 interface ProfileData {
   id: number;
@@ -9,7 +11,6 @@ interface ProfileData {
   email: string;
   profile_picture_url: string | null;
   background_image_url: string | null;
-  bio: string | null;
   created_at: string;
 }
 
@@ -50,6 +51,7 @@ interface ChartsData {
   statuses: { status: string; count: number }[];
   favorites: FavoriteItem[];
   ratingDistribution: { rating: number; count: number }[];
+  heatmap: { day: string; count: number }[];
 }
 
 const TMDB_GENRES: Record<number, string> = {
@@ -271,16 +273,21 @@ function PosterCard({
   status,
   personalRating,
   timestamp,
+  tmdbId,
+  mediaType,
 }: {
   title: string;
   posterPath: string | null;
   status: string;
   personalRating: number | null;
   timestamp?: string;
+  tmdbId: number;
+  mediaType: string;
 }) {
   const poster = tmdbPoster(posterPath);
+  const href = `/${mediaType === 'movie' ? 'movies' : 'shows'}/${tmdbId}`;
   return (
-    <div className="shrink-0 w-32 h-48 relative rounded-xl overflow-hidden border border-accent-blue/15 shadow-lg cursor-default transition-all duration-200 hover:border-accent-blue/40 hover:scale-[1.03] hover:shadow-accent-blue/10 hover:shadow-xl">
+    <Link href={href} className="shrink-0 w-32 h-48 relative rounded-xl overflow-hidden border border-accent-blue/15 shadow-lg transition-all duration-200 hover:border-accent-blue/40 hover:scale-[1.03] hover:shadow-accent-blue/10 hover:shadow-xl">
       {poster ? (
         <img src={poster} alt={title} className="w-full h-full object-cover" />
       ) : (
@@ -305,6 +312,135 @@ function PosterCard({
           <p className="text-white/40 text-[9px] mt-1.5">{timeAgo(timestamp)}</p>
         )}
       </div>
+    </Link>
+  );
+}
+
+function ActivityHeatmap({ data }: { data: { day: string; count: number }[] }) {
+  const countMap = new Map(data.map((d) => [d.day, d.count]));
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Start of the current week (Sunday)
+  const thisSunday = new Date(today);
+  thisSunday.setDate(today.getDate() - today.getDay());
+
+  // Go back 51 weeks to get the start of the 52-week window
+  const startSunday = new Date(thisSunday);
+  startSunday.setDate(thisSunday.getDate() - 51 * 7);
+
+  interface DayCell { date: Date; count: number; future: boolean }
+  const weeks: DayCell[][] = [];
+  const cur = new Date(startSunday);
+
+  // Build exactly 52 full weeks (364 days), days after today are marked future
+  for (let w = 0; w < 52; w++) {
+    const week: DayCell[] = [];
+    for (let d = 0; d < 7; d++) {
+      const cell = new Date(cur);
+      const key = `${cell.getFullYear()}-${String(cell.getMonth() + 1).padStart(2, '0')}-${String(cell.getDate()).padStart(2, '0')}`;
+      week.push({ date: cell, count: countMap.get(key) ?? 0, future: cell > today });
+      cur.setDate(cur.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+
+  const getColor = (count: number) => {
+    if (count === 0) return 'rgba(137,207,240,0.06)';
+    if (count === 1) return 'rgba(137,207,240,0.28)';
+    if (count === 2) return 'rgba(137,207,240,0.52)';
+    if (count === 3) return 'rgba(137,207,240,0.75)';
+    return 'rgba(137,207,240,0.95)';
+  };
+
+  const monthLabels: { weekIndex: number; label: string }[] = [];
+  weeks.forEach((week, wi) => {
+    const first = week[0].date;
+    const prev = wi > 0 ? weeks[wi - 1][0].date : null;
+    if (!prev || first.getMonth() !== prev.getMonth()) {
+      monthLabels.push({
+        weekIndex: wi,
+        label: first.toLocaleDateString('en-US', { month: 'short' }),
+      });
+    }
+  });
+
+  const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+  const total = data.reduce((s, d) => s + d.count, 0);
+
+  const CELL = 16;
+  const GAP = 5;
+
+  return (
+    <div>
+      <div className="overflow-x-auto pb-2">
+        <div className="inline-flex gap-3 min-w-max">
+          {/* Day-of-week labels */}
+          <div className="flex flex-col pt-6 pr-1" style={{ gap: GAP }}>
+            {DAY_LABELS.map((label, i) => (
+              <div
+                key={i}
+                className="text-xs text-text-muted flex items-center justify-end w-8"
+                style={{ height: CELL, lineHeight: `${CELL}px` }}
+              >
+                {label}
+              </div>
+            ))}
+          </div>
+
+          {/* Grid */}
+          <div>
+            {/* Month labels */}
+            <div className="flex mb-2 h-5" style={{ gap: GAP }}>
+              {weeks.map((_, wi) => {
+                const label = monthLabels.find((m) => m.weekIndex === wi);
+                return (
+                  <div key={wi} className="relative" style={{ width: CELL }}>
+                    {label && (
+                      <span className="absolute text-xs text-text-muted whitespace-nowrap font-medium" style={{ left: 0 }}>
+                        {label.label}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Week columns */}
+            <div className="flex" style={{ gap: GAP }}>
+              {weeks.map((week, wi) => (
+                <div key={wi} className="flex flex-col" style={{ gap: GAP }}>
+                  {week.map((day, di) => (
+                    <div
+                      key={di}
+                      className="rounded-[3px] transition-all hover:scale-110 cursor-default"
+                      style={{
+                        width: CELL,
+                        height: CELL,
+                        background: day.future ? 'transparent' : getColor(day.count),
+                      }}
+                      title={day.future ? '' : `${day.date.toDateString()}: ${day.count} interaction${day.count !== 1 ? 's' : ''}`}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between mt-4">
+        <p className="text-text-muted text-sm">{total} interaction{total !== 1 ? 's' : ''} in the last year</p>
+        <div className="flex items-center gap-2 text-text-muted text-xs">
+          <span>Less</span>
+          {[0, 1, 2, 3, 4].map((n) => (
+            <div key={n} className="rounded-[3px]" style={{ width: CELL, height: CELL, background: getColor(n) }} />
+          ))}
+          <span>More</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -313,12 +449,14 @@ type ChartTab = 'genres' | 'providers' | 'status' | 'ratings';
 
 export default function ProfilePage() {
   const router = useRouter();
+  const toast = useToast();
   const [user, setUser] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [charts, setCharts] = useState<ChartsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<'pfp' | 'bg' | null>(null);
   const [chartTab, setChartTab] = useState<ChartTab>('genres');
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
 
@@ -348,8 +486,10 @@ export default function ProfilePage() {
     type: 'pfp' | 'bg'
   ) => {
     setSaving(type);
+    const prev = user?.[field] ?? null;
     try {
       const dataUrl = await toDataUrl(file);
+      setUser((u) => u ? { ...u, [field]: dataUrl } : u);
       const res = await fetch('/api/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -360,9 +500,34 @@ export default function ProfilePage() {
         const err = await res.json();
         throw new Error(err.error ?? 'Upload failed');
       }
-      setUser((prev) => prev ? { ...prev, [field]: dataUrl } : prev);
+      toast('Image updated');
     } catch (e) {
-      console.error('Failed to upload image:', e);
+      setUser((u) => u ? { ...u, [field]: prev } : u);
+      toast(e instanceof Error ? e.message : 'Failed to upload image', 'error');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleImageDelete = async (
+    field: 'profile_picture_url' | 'background_image_url',
+    type: 'pfp' | 'bg'
+  ) => {
+    setSaving(type);
+    const prev = user?.[field] ?? null;
+    try {
+      setUser((u) => u ? { ...u, [field]: null } : u);
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ [field]: null }),
+      });
+      if (!res.ok) throw new Error('Delete failed');
+      toast('Image removed');
+    } catch {
+      setUser((u) => u ? { ...u, [field]: prev } : u);
+      toast('Failed to remove image', 'error');
     } finally {
       setSaving(null);
     }
@@ -439,20 +604,29 @@ export default function ProfilePage() {
         )}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/10 to-bg-dark" />
 
-        <button
-          onClick={() => bgInputRef.current?.click()}
-          disabled={saving === 'bg'}
-          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/banner:opacity-100 transition-opacity cursor-pointer"
-        >
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-black/60 backdrop-blur-sm text-white text-sm font-medium rounded-xl border border-white/20 hover:bg-black/70 transition-colors">
+        <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover/banner:opacity-100 transition-opacity pointer-events-none group-hover/banner:pointer-events-auto">
+          <button
+            onClick={() => bgInputRef.current?.click()}
+            disabled={saving === 'bg'}
+            className="flex items-center gap-2 px-4 py-2.5 bg-black/60 backdrop-blur-sm text-white text-sm font-medium rounded-xl border border-white/20 hover:bg-black/70 transition-colors cursor-pointer disabled:opacity-50"
+          >
             {saving === 'bg' ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
               <span className="text-base">🖼</span>
             )}
             Change Background
-          </div>
-        </button>
+          </button>
+          {user.background_image_url && (
+            <button
+              onClick={() => handleImageDelete('background_image_url', 'bg')}
+              disabled={saving === 'bg'}
+              className="flex items-center gap-2 px-4 py-2.5 bg-black/60 backdrop-blur-sm text-red-400 text-sm font-medium rounded-xl border border-red-400/30 hover:bg-black/70 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Remove
+            </button>
+          )}
+        </div>
 
         <input
           ref={bgInputRef}
@@ -479,17 +653,30 @@ export default function ProfilePage() {
                   <span>{user.username[0]?.toUpperCase()}</span>
                 )}
               </div>
-              <button
-                onClick={() => pfpInputRef.current?.click()}
-                disabled={saving === 'pfp'}
-                className="absolute inset-0 rounded-full bg-black/55 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer"
-              >
+              <div className="absolute inset-0 rounded-full bg-black/55 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity pointer-events-none group-hover/avatar:pointer-events-auto">
                 {saving === 'pfp' ? (
                   <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                  <span className="text-white text-2xl">📷</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => pfpInputRef.current?.click()}
+                      className="text-white text-2xl cursor-pointer"
+                      title="Change photo"
+                    >
+                      📷
+                    </button>
+                    {user.profile_picture_url && (
+                      <button
+                        onClick={() => handleImageDelete('profile_picture_url', 'pfp')}
+                        className="text-red-400 text-lg font-bold cursor-pointer leading-none"
+                        title="Remove photo"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 )}
-              </button>
+              </div>
               <input
                 ref={pfpInputRef}
                 type="file"
@@ -504,8 +691,8 @@ export default function ProfilePage() {
             </div>
 
             <div className="pb-2">
-              <h1 className="text-3xl font-bold text-text-primary">{user.username}</h1>
-              <p className="text-text-muted text-sm mt-1">Member since {memberYear}</p>
+              <h1 className="text-4xl font-bold text-text-primary tracking-tight">{user.username}</h1>
+              <p className="text-text-muted text-sm mt-1.5">Member since {memberYear}</p>
             </div>
           </div>
 
@@ -520,7 +707,10 @@ export default function ProfilePage() {
         {/* library breakdown bar */}
         {total > 0 && (
           <div className="modern-panel rounded-2xl p-6 mb-6">
-            <p className="text-text-muted text-xs uppercase tracking-wider mb-4">Library breakdown</p>
+            <div className="flex items-center gap-2.5 mb-5">
+              <div className="w-0.5 h-4 rounded-full bg-accent-blue" style={{ boxShadow: '0 0 8px rgba(137,207,240,0.5)' }} />
+              <p className="text-text-primary text-sm font-semibold tracking-tight">Library breakdown</p>
+            </div>
             <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
               {(stats!.watching > 0) && (
                 <div className="bg-blue-400 rounded-l-full transition-all" style={{ width: `${(stats!.watching / total) * 100}%` }} />
@@ -559,37 +749,71 @@ export default function ProfilePage() {
           {statCards.map((s) => (
             <div
               key={s.label}
-              className={`modern-panel rounded-2xl p-5 flex flex-col items-center justify-center gap-1.5 border ${s.accent}`}
+              className={`modern-panel rounded-2xl p-6 flex flex-col items-center justify-center gap-2 border ${s.accent}`}
             >
-              <p className={`text-3xl font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-text-muted text-xs uppercase tracking-wider">{s.label}</p>
+              <p className={`text-4xl font-bold tracking-tight ${s.color}`}>{s.value}</p>
+              <p className="text-text-muted text-[10px] uppercase tracking-widest font-semibold">{s.label}</p>
             </div>
           ))}
         </div>
 
         {/* recent activity */}
-        {charts && charts.activity.length > 0 && (
+        {charts && (
           <div className="mb-6">
-            <p className="text-text-muted text-xs uppercase tracking-wider mb-3">Recent activity</p>
-            <div className="flex gap-3 overflow-x-auto pb-2" >
-              {charts.activity.map((item, i) => (
-                <PosterCard
-                  key={i}
-                  title={item.title}
-                  posterPath={item.poster_path}
-                  status={item.status}
-                  personalRating={item.personal_rating}
-                  timestamp={item.updated_at}
-                />
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-0.5 h-4 rounded-full bg-accent-blue" style={{ boxShadow: '0 0 8px rgba(137,207,240,0.5)' }} />
+                <p className="text-text-primary text-sm font-semibold tracking-tight">Recent activity</p>
+              </div>
+              <button
+                onClick={() => setShowHeatmap((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                  showHeatmap
+                    ? 'bg-accent-blue/15 text-accent-blue border border-accent-blue/25'
+                    : 'bg-white/[0.05] text-text-muted border border-white/[0.06] hover:text-text-primary hover:bg-white/[0.08]'
+                }`}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <rect x="1" y="2" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                  <path d="M1 5h10" stroke="currentColor" strokeWidth="1.2"/>
+                  <path d="M4 1v2M8 1v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                </svg>
+                Heatmap
+              </button>
             </div>
+
+            {showHeatmap ? (
+              <div className="modern-panel rounded-2xl p-5">
+                <ActivityHeatmap data={charts.heatmap ?? []} />
+              </div>
+            ) : charts.activity.length > 0 ? (
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {charts.activity.map((item, i) => (
+                  <PosterCard
+                    key={i}
+                    title={item.title}
+                    posterPath={item.poster_path}
+                    status={item.status}
+                    personalRating={item.personal_rating}
+                    timestamp={item.updated_at}
+                    tmdbId={item.tmdb_id}
+                    mediaType={item.media_type}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-text-muted text-sm py-4">No recent activity yet.</p>
+            )}
           </div>
         )}
 
         {/* favorites */}
         {charts && charts.favorites.length > 0 && (
           <div className="mb-6">
-            <p className="text-text-muted text-xs uppercase tracking-wider mb-3">Favorites</p>
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-0.5 h-4 rounded-full bg-accent-blue" style={{ boxShadow: '0 0 8px rgba(137,207,240,0.5)' }} />
+              <p className="text-text-primary text-sm font-semibold tracking-tight">Favorites</p>
+            </div>
             <div className="flex gap-3 overflow-x-auto pb-2" >
               {charts.favorites.map((item, i) => (
                 <PosterCard
@@ -598,6 +822,8 @@ export default function ProfilePage() {
                   posterPath={item.poster_path}
                   status={item.status}
                   personalRating={item.personal_rating}
+                  tmdbId={item.tmdb_id}
+                  mediaType={item.media_type}
                 />
               ))}
             </div>
@@ -607,17 +833,20 @@ export default function ProfilePage() {
         {/* charts panel */}
         {charts && (
           <div className="modern-panel rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-6">
-              <p className="text-text-muted text-xs uppercase tracking-wider">Statistics</p>
-              <div className="flex gap-1 p-1 bg-white/5 rounded-xl border border-white/10">
+            <div className="flex items-center justify-between mb-7">
+              <div className="flex items-center gap-2.5">
+                <div className="w-0.5 h-5 rounded-full bg-accent-blue" style={{ boxShadow: '0 0 8px rgba(137,207,240,0.5)' }} />
+                <p className="text-text-primary text-base font-semibold tracking-tight">Statistics</p>
+              </div>
+              <div className="flex gap-0.5 p-0.5 bg-white/[0.04] rounded-xl border border-white/[0.07]">
                 {chartTabs.map((tab) => (
                   <button
                     key={tab.key}
                     onClick={() => setChartTab(tab.key)}
-                    className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                    className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                       chartTab === tab.key
-                        ? 'bg-accent-blue/20 text-accent-blue border border-accent-blue/30'
-                        : 'text-text-muted hover:text-text-primary'
+                        ? 'bg-accent-blue/12 text-accent-blue border border-accent-blue/20'
+                        : 'text-text-muted hover:text-text-primary border border-transparent'
                     }`}
                   >
                     {tab.label}

@@ -250,20 +250,21 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-center justify-between mb-7">
-      <div className="flex items-center gap-3">
-        <div className={`w-1.5 h-6 rounded-full ${accentColor || 'bg-accent-blue'}`} />
-        <h2 className="text-2xl font-bold text-text-primary">{title}</h2>
+      <div className="flex items-center gap-3.5">
+        <div className={`w-1 h-7 rounded-full ${accentColor || 'bg-accent-blue'}`}
+          style={{ boxShadow: '0 0 12px rgba(137,207,240,0.5)' }} />
+        <h2 className="text-xl font-semibold text-text-primary tracking-tight">{title}</h2>
       </div>
       {tabs && (
-        <div className="flex gap-1">
+        <div className="flex gap-0.5 p-0.5 bg-white/[0.04] rounded-xl border border-white/[0.06]">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => onTabChange?.(tab.id)}
-              className={`px-4 py-1.5 text-sm font-semibold transition-all border-b-2 ${
+              className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                 activeTab === tab.id
-                  ? 'text-accent-blue border-accent-blue'
-                  : 'text-text-muted border-transparent hover:text-text-primary'
+                  ? 'text-accent-blue bg-accent-blue/12 border border-accent-blue/20'
+                  : 'text-text-muted hover:text-text-primary border border-transparent'
               }`}
             >
               {tab.label}
@@ -544,15 +545,15 @@ export default function HomePage() {
                 </p>
               )}
 
-              <div className="flex gap-4">
-                <button className="flex items-center gap-2.5 px-8 py-3.5 bg-white text-black font-bold rounded-full hover:bg-white/85 transition-colors text-sm">
-                  <span className="text-base">▶</span> Play
+              <div className="flex gap-3">
+                <button className="flex items-center gap-2 px-7 py-3 bg-white text-black font-bold rounded-full hover:bg-white/90 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm shadow-[0_4px_20px_rgba(255,255,255,0.18)]">
+                  <span className="text-sm">▶</span> Play
                 </button>
                 <Link
                   href={`/dashboard/movies/${featured.id}`}
-                  className="flex items-center gap-2.5 px-8 py-3.5 border-2 border-white/60 text-white rounded-full hover:border-accent-blue hover:text-accent-blue transition-colors text-sm font-semibold"
+                  className="flex items-center gap-2 px-7 py-3 border border-white/30 text-white/90 bg-white/5 rounded-full hover:border-accent-blue/60 hover:text-accent-blue hover:bg-accent-blue/8 active:scale-[0.98] transition-all text-sm font-semibold backdrop-blur-sm"
                 >
-                  <span className="text-base">ⓘ</span> See More
+                  <span className="text-sm">ⓘ</span> More info
                 </Link>
               </div>
 
@@ -619,15 +620,15 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-1">
+            <div className="flex gap-0.5 p-0.5 bg-white/[0.04] rounded-xl border border-white/[0.06]">
               {MEDIA_TABS.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setTop10Tab(tab.id as 'movie' | 'tv')}
-                  className={`px-4 py-1.5 text-sm font-semibold transition-all border-b-2 ${
+                  className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                     top10Tab === tab.id
-                      ? 'text-accent-blue border-accent-blue'
-                      : 'text-text-muted border-transparent hover:text-text-primary'
+                      ? 'text-accent-blue bg-accent-blue/12 border border-accent-blue/20'
+                      : 'text-text-muted hover:text-text-primary border border-transparent'
                   }`}
                 >
                   {tab.label}
