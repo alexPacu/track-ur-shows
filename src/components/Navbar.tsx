@@ -13,7 +13,6 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 bg-bg-dark/90 backdrop-blur-xl border-b border-white/[0.05]">
-      {/* Top accent line */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-accent-blue/50 to-transparent" />
 
       <div className="mx-auto flex h-[68px] max-w-[1480px] items-center justify-between px-10">
