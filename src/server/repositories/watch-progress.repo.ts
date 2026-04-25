@@ -1,4 +1,5 @@
-import { queryOne, queryMany } from '@/lib/db';
+import { db } from '@/lib/db';
+import { sql } from 'kysely';
 
 export interface WatchProgress {
   id: number;
@@ -39,56 +40,51 @@ export class WatchProgressRepository {
   static async upsert(input: UpsertWatchProgressInput): Promise<WatchProgress> {
     const season = input.season ?? 0;
     const episode = input.episode ?? 0;
-    const result = await queryOne<WatchProgress>(
-      `INSERT INTO watch_progress
-        (user_id, tmdb_id, media_type, season, episode,
-         progress_seconds, duration_seconds, progress_percent,
-         title, poster_path, backdrop_path, completed, last_watched_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
-       ON CONFLICT (user_id, tmdb_id, media_type, season, episode)
-       DO UPDATE SET
-         progress_seconds = EXCLUDED.progress_seconds,
-         duration_seconds = EXCLUDED.duration_seconds,
-         progress_percent = EXCLUDED.progress_percent,
-         title = COALESCE(EXCLUDED.title, watch_progress.title),
-         poster_path = COALESCE(EXCLUDED.poster_path, watch_progress.poster_path),
-         backdrop_path = COALESCE(EXCLUDED.backdrop_path, watch_progress.backdrop_path),
-         completed = EXCLUDED.completed,
-         last_watched_at = CURRENT_TIMESTAMP
-       RETURNING *`,
-      [
-        input.userId,
-        input.tmdbId,
-        input.mediaType,
+    const result = await db
+      .insertInto('watch_progress')
+      .values({
+        user_id: input.userId,
+        tmdb_id: input.tmdbId,
+        media_type: input.mediaType,
         season,
         episode,
-        input.progressSeconds ?? 0,
-        input.durationSeconds ?? 0,
-        input.progressPercent ?? 0,
-        input.title ?? null,
-        input.posterPath ?? null,
-        input.backdropPath ?? null,
-        input.completed ?? false,
-      ]
-    );
-    if (!result) throw new Error('Failed to upsert watch progress');
-    return result;
+        progress_seconds: input.progressSeconds ?? 0,
+        duration_seconds: input.durationSeconds ?? 0,
+        progress_percent: input.progressPercent ?? 0,
+        title: input.title ?? null,
+        poster_path: input.posterPath ?? null,
+        backdrop_path: input.backdropPath ?? null,
+        completed: input.completed ?? false,
+      })
+      .onConflict((oc) =>
+        oc.columns(['user_id', 'tmdb_id', 'media_type', 'season', 'episode']).doUpdateSet({
+          progress_seconds: sql`excluded.progress_seconds`,
+          duration_seconds: sql`excluded.duration_seconds`,
+          progress_percent: sql`excluded.progress_percent`,
+          title: sql`COALESCE(excluded.title, watch_progress.title)`,
+          poster_path: sql`COALESCE(excluded.poster_path, watch_progress.poster_path)`,
+          backdrop_path: sql`COALESCE(excluded.backdrop_path, watch_progress.backdrop_path)`,
+          completed: sql`excluded.completed`,
+          last_watched_at: new Date(),
+        })
+      )
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return result as unknown as WatchProgress;
   }
 
   // returns unfinished items, most-recently-watched first
   // 1 row / show
   static async listContinueWatching(userId: number, limit: number = 20): Promise<WatchProgress[]> {
-    return queryMany<WatchProgress>(
-      `SELECT DISTINCT ON (tmdb_id, media_type) *
-       FROM watch_progress
-       WHERE user_id = $1 AND completed = FALSE
-       ORDER BY tmdb_id, media_type, last_watched_at DESC`,
-      [userId]
-    ).then((rows) =>
-      rows
-        .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
-        .slice(0, limit)
-    );
+    const { rows } = await sql<WatchProgress>`
+      SELECT DISTINCT ON (tmdb_id, media_type) *
+      FROM watch_progress
+      WHERE user_id = ${userId} AND completed = FALSE
+      ORDER BY tmdb_id, media_type, last_watched_at DESC
+    `.execute(db);
+    return rows
+      .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
+      .slice(0, limit);
   }
 
   static async deleteEntry(
@@ -98,10 +94,13 @@ export class WatchProgressRepository {
     season: number = 0,
     episode: number = 0
   ): Promise<void> {
-    await queryOne(
-      `DELETE FROM watch_progress
-       WHERE user_id = $1 AND tmdb_id = $2 AND media_type = $3 AND season = $4 AND episode = $5`,
-      [userId, tmdbId, mediaType, season, episode]
-    );
+    await db
+      .deleteFrom('watch_progress')
+      .where('user_id', '=', userId)
+      .where('tmdb_id', '=', tmdbId)
+      .where('media_type', '=', mediaType)
+      .where('season', '=', season)
+      .where('episode', '=', episode)
+      .execute();
   }
 }

@@ -1,4 +1,5 @@
-import { queryOne, queryMany, query } from '@/lib/db';
+import { db } from '@/lib/db';
+import { sql } from 'kysely';
 
 export interface Show {
   id: number;
@@ -45,89 +46,81 @@ export class ShowRepository {
     tmdbId: number,
     data: Omit<Show, 'id' | 'tmdb_id' | 'created_at' | 'updated_at'>
   ): Promise<Show> {
-    const result = await queryOne<Show>(
-      `INSERT INTO shows (tmdb_id, title, description, media_type, genres, rating, release_date, poster_path, backdrop_path, runtime)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (tmdb_id) DO UPDATE SET
-         title = EXCLUDED.title,
-         poster_path = COALESCE(EXCLUDED.poster_path, shows.poster_path),
-         backdrop_path = COALESCE(EXCLUDED.backdrop_path, shows.backdrop_path),
-         rating = COALESCE(EXCLUDED.rating, shows.rating),
-         updated_at = CURRENT_TIMESTAMP
-       RETURNING *`,
-      [
-        tmdbId,
-        data.title,
-        data.description,
-        data.media_type,
-        data.genres ? JSON.stringify(data.genres) : null,
-        data.rating,
-        data.release_date,
-        data.poster_path,
-        data.backdrop_path,
-        data.runtime,
-      ]
-    );
-    if (!result) throw new Error('Failed to create show');
-    return result;
+    const result = await db
+      .insertInto('shows')
+      .values({
+        tmdb_id: tmdbId,
+        title: data.title,
+        description: data.description ?? null,
+        media_type: data.media_type,
+        genres: data.genres ? JSON.stringify(data.genres) : null,
+        rating: data.rating ?? null,
+        release_date: data.release_date ?? null,
+        poster_path: data.poster_path ?? null,
+        backdrop_path: data.backdrop_path ?? null,
+        runtime: data.runtime ?? null,
+      })
+      .onConflict((oc) =>
+        oc.column('tmdb_id').doUpdateSet({
+          title: sql`excluded.title`,
+          poster_path: sql`COALESCE(excluded.poster_path, shows.poster_path)`,
+          backdrop_path: sql`COALESCE(excluded.backdrop_path, shows.backdrop_path)`,
+          rating: sql`COALESCE(excluded.rating, shows.rating)`,
+          updated_at: new Date(),
+        })
+      )
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return result as unknown as Show;
   }
 
   static async findById(id: number): Promise<Show | null> {
-    return queryOne<Show>(
-      `SELECT * FROM shows WHERE id = $1`,
-      [id]
-    );
+    const result = await db.selectFrom('shows').selectAll().where('id', '=', id).executeTakeFirst();
+    return result ? (result as unknown as Show) : null;
   }
 
   static async findByTmdbId(tmdbId: number): Promise<Show | null> {
-    return queryOne<Show>(
-      `SELECT * FROM shows WHERE tmdb_id = $1`,
-      [tmdbId]
-    );
+    const result = await db.selectFrom('shows').selectAll().where('tmdb_id', '=', tmdbId).executeTakeFirst();
+    return result ? (result as unknown as Show) : null;
   }
 
-  static async search(
-    query_text: string,
-    limit: number = 20
-  ): Promise<Show[]> {
-    return queryMany<Show>(
-      `SELECT * FROM shows
-       WHERE title ILIKE $1
-       ORDER BY rating DESC NULLS LAST
-       LIMIT $2`,
-      [`%${query_text}%`, limit]
-    );
+  static async search(query_text: string, limit: number = 20): Promise<Show[]> {
+    const rows = await db
+      .selectFrom('shows')
+      .selectAll()
+      .where('title', 'ilike', `%${query_text}%`)
+      .orderBy(sql`rating DESC NULLS LAST`)
+      .limit(limit)
+      .execute();
+    return rows as unknown as Show[];
   }
 
-  static async getByMediaType(
-    mediaType: 'movie' | 'tv',
-    limit: number = 20,
-    offset: number = 0
-  ): Promise<Show[]> {
-    return queryMany<Show>(
-      `SELECT * FROM shows
-       WHERE media_type = $1
-       ORDER BY rating DESC NULLS LAST, created_at DESC
-       LIMIT $2 OFFSET $3`,
-      [mediaType, limit, offset]
-    );
+  static async getByMediaType(mediaType: 'movie' | 'tv', limit: number = 20, offset: number = 0): Promise<Show[]> {
+    const rows = await db
+      .selectFrom('shows')
+      .selectAll()
+      .where('media_type', '=', mediaType)
+      .orderBy(sql`rating DESC NULLS LAST`)
+      .orderBy('created_at', 'desc')
+      .limit(limit)
+      .offset(offset)
+      .execute();
+    return rows as unknown as Show[];
   }
 
-  static async getPopular(
-    limit: number = 20
-  ): Promise<Show[]> {
-    return queryMany<Show>(
-      `SELECT * FROM shows
-       ORDER BY rating DESC NULLS LAST
-       LIMIT $1`,
-      [limit]
-    );
+  static async getPopular(limit: number = 20): Promise<Show[]> {
+    const rows = await db
+      .selectFrom('shows')
+      .selectAll()
+      .orderBy(sql`rating DESC NULLS LAST`)
+      .limit(limit)
+      .execute();
+    return rows as unknown as Show[];
   }
 
   static async upsertProviders(showId: number, watchProviders: Record<string, any>): Promise<void> {
     const TYPE_ORDER = ['flatrate', 'buy', 'rent'] as const;
 
-    // collecting providers
     const providerMap = new Map<number, { name: string; logoPath: string | null; type: string }>();
     const links: { tmdbProviderId: number; region: string; type: string }[] = [];
 
@@ -146,56 +139,56 @@ export class ShowRepository {
 
     const dbIds = new Map<number, number>();
     for (const [tmdbProviderId, info] of providerMap) {
-      const row = await queryOne<{ id: number }>(
-        `INSERT INTO watch_providers (tmdb_provider_id, name, logo_path, provider_type)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (tmdb_provider_id) DO UPDATE SET
-           name = EXCLUDED.name,
-           logo_path = COALESCE(EXCLUDED.logo_path, watch_providers.logo_path)
-         RETURNING id`,
-        [tmdbProviderId, info.name, info.logoPath, info.type]
-      );
+      const row = await db
+        .insertInto('watch_providers')
+        .values({
+          tmdb_provider_id: tmdbProviderId,
+          name: info.name,
+          logo_path: info.logoPath,
+          provider_type: info.type as any,
+        })
+        .onConflict((oc) =>
+          oc.column('tmdb_provider_id').doUpdateSet({
+            name: sql`excluded.name`,
+            logo_path: sql`COALESCE(excluded.logo_path, watch_providers.logo_path)`,
+          })
+        )
+        .returning('id')
+        .executeTakeFirst();
       if (row) dbIds.set(tmdbProviderId, row.id);
     }
 
     for (const link of links) {
       const dbId = dbIds.get(link.tmdbProviderId);
       if (!dbId) continue;
-      await query(
-        `INSERT INTO show_watch_providers (show_id, provider_id, region, provider_type)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (show_id, provider_id, region, provider_type) DO NOTHING`,
-        [showId, dbId, link.region, link.type]
-      );
+      await db
+        .insertInto('show_watch_providers')
+        .values({
+          show_id: showId,
+          provider_id: dbId,
+          region: link.region,
+          provider_type: link.type as any,
+        })
+        .onConflict((oc) =>
+          oc.columns(['show_id', 'provider_id', 'region', 'provider_type']).doNothing()
+        )
+        .execute();
     }
   }
 
-  static async update(
-    id: number,
-    data: Partial<Show>
-  ): Promise<Show | null> {
-    const updates: string[] = [];
-    const values: any[] = [];
-    let paramCount = 1;
-
-    if (data.rating !== undefined) {
-      updates.push(`rating = $${paramCount++}`);
-      values.push(data.rating);
-    }
-    if (data.genres !== undefined) {
-      updates.push(`genres = $${paramCount++}`);
-      values.push(data.genres ? JSON.stringify(data.genres) : null);
-    }
-
-    if (updates.length === 0) return this.findById(id);
-
-    updates.push(`updated_at = CURRENT_TIMESTAMP`);
-    values.push(id);
-
-    return queryOne<Show>(
-      `UPDATE shows SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`,
-      values
-    );
+  static async update(id: number, data: Partial<Show>): Promise<Show | null> {
+    const updates: Record<string, unknown> = {};
+    if (data.rating !== undefined) updates.rating = data.rating;
+    if (data.genres !== undefined) updates.genres = data.genres ? JSON.stringify(data.genres) : null;
+    if (Object.keys(updates).length === 0) return this.findById(id);
+    updates.updated_at = new Date();
+    const result = await db
+      .updateTable('shows')
+      .set(updates as any)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirst();
+    return result ? (result as unknown as Show) : null;
   }
 }
 
@@ -205,34 +198,41 @@ export class SeasonRepository {
     seasonNumber: number,
     data?: Omit<Season, 'id' | 'show_id' | 'season_number' | 'created_at'>
   ): Promise<Season> {
-    const existing = await queryOne<Season>(
-      `SELECT * FROM seasons WHERE show_id = $1 AND season_number = $2`,
-      [showId, seasonNumber]
-    );
-    if (existing) return existing;
+    const existing = await db
+      .selectFrom('seasons')
+      .selectAll()
+      .where('show_id', '=', showId)
+      .where('season_number', '=', seasonNumber)
+      .executeTakeFirst();
+    if (existing) return existing as unknown as Season;
 
-    const result = await queryOne<Season>(
-      `INSERT INTO seasons (show_id, season_number, air_date, episode_count, poster_path)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [showId, seasonNumber, data?.air_date, data?.episode_count, data?.poster_path]
-    );
-    if (!result) throw new Error('Failed to create season');
-    return result;
+    const result = await db
+      .insertInto('seasons')
+      .values({
+        show_id: showId,
+        season_number: seasonNumber,
+        air_date: data?.air_date ?? null,
+        episode_count: data?.episode_count ?? null,
+        poster_path: data?.poster_path ?? null,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return result as unknown as Season;
   }
 
   static async findById(id: number): Promise<Season | null> {
-    return queryOne<Season>(
-      `SELECT * FROM seasons WHERE id = $1`,
-      [id]
-    );
+    const result = await db.selectFrom('seasons').selectAll().where('id', '=', id).executeTakeFirst();
+    return result ? (result as unknown as Season) : null;
   }
 
   static async getByShow(showId: number): Promise<Season[]> {
-    return queryMany<Season>(
-      `SELECT * FROM seasons WHERE show_id = $1 ORDER BY season_number ASC`,
-      [showId]
-    );
+    const rows = await db
+      .selectFrom('seasons')
+      .selectAll()
+      .where('show_id', '=', showId)
+      .orderBy('season_number', 'asc')
+      .execute();
+    return rows as unknown as Season[];
   }
 }
 
@@ -243,40 +243,54 @@ export class EpisodeRepository {
     episodeNumber: number,
     data: Omit<Episode, 'id' | 'season_id' | 'show_id' | 'episode_number' | 'created_at'>
   ): Promise<Episode> {
-    const existing = await queryOne<Episode>(
-      `SELECT * FROM episodes WHERE season_id = $1 AND episode_number = $2`,
-      [seasonId, episodeNumber]
-    );
-    if (existing) return existing;
+    const existing = await db
+      .selectFrom('episodes')
+      .selectAll()
+      .where('season_id', '=', seasonId)
+      .where('episode_number', '=', episodeNumber)
+      .executeTakeFirst();
+    if (existing) return existing as unknown as Episode;
 
-    const result = await queryOne<Episode>(
-      `INSERT INTO episodes (season_id, show_id, episode_number, name, air_date, runtime, still_path, overview, vote_average)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING *`,
-      [seasonId, showId, episodeNumber, data.name, data.air_date, data.runtime, data.still_path, data.overview, data.vote_average]
-    );
-    if (!result) throw new Error('Failed to create episode');
-    return result;
+    const result = await db
+      .insertInto('episodes')
+      .values({
+        season_id: seasonId,
+        show_id: showId,
+        episode_number: episodeNumber,
+        name: data.name,
+        air_date: data.air_date ?? null,
+        runtime: data.runtime ?? null,
+        still_path: data.still_path ?? null,
+        overview: data.overview ?? null,
+        vote_average: data.vote_average ?? null,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return result as unknown as Episode;
   }
 
   static async findById(id: number): Promise<Episode | null> {
-    return queryOne<Episode>(
-      `SELECT * FROM episodes WHERE id = $1`,
-      [id]
-    );
+    const result = await db.selectFrom('episodes').selectAll().where('id', '=', id).executeTakeFirst();
+    return result ? (result as unknown as Episode) : null;
   }
 
   static async getBySeason(seasonId: number): Promise<Episode[]> {
-    return queryMany<Episode>(
-      `SELECT * FROM episodes WHERE season_id = $1 ORDER BY episode_number ASC`,
-      [seasonId]
-    );
+    const rows = await db
+      .selectFrom('episodes')
+      .selectAll()
+      .where('season_id', '=', seasonId)
+      .orderBy('episode_number', 'asc')
+      .execute();
+    return rows as unknown as Episode[];
   }
 
   static async getByShow(showId: number): Promise<Episode[]> {
-    return queryMany<Episode>(
-      `SELECT * FROM episodes WHERE show_id = $1 ORDER BY air_date ASC`,
-      [showId]
-    );
+    const rows = await db
+      .selectFrom('episodes')
+      .selectAll()
+      .where('show_id', '=', showId)
+      .orderBy('air_date', 'asc')
+      .execute();
+    return rows as unknown as Episode[];
   }
 }
