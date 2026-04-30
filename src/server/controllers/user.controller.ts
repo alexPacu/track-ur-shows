@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as v from 'valibot';
 import { UserService } from '@/server/services/user.service';
 import { extractUserFromRequest } from '@/server/middlewares/auth.middleware';
+import { RegisterSchema, LoginSchema } from '@/server/validators/auth.validator';
 
 export class UserController {
   static async register(req: NextRequest) {
     try {
-      const body = await req.json();
-      const { email, username, password, confirmPassword } = body;
-
-      if (password !== confirmPassword) {
-        return NextResponse.json({ error: 'Passwords do not match' }, { status: 400 });
+      const parsed = v.safeParse(RegisterSchema, await req.json());
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.issues[0].message }, { status: 400 });
       }
+      const { email, username, password } = parsed.output;
 
       const result = await UserService.register(email, username, password);
 
@@ -41,8 +42,11 @@ export class UserController {
 
   static async login(req: NextRequest) {
     try {
-      const body = await req.json();
-      const { email, password } = body;
+      const parsed = v.safeParse(LoginSchema, await req.json());
+      if (!parsed.success) {
+        return NextResponse.json({ error: parsed.issues[0].message }, { status: 400 });
+      }
+      const { email, password } = parsed.output;
 
       const result = await UserService.login(email, password);
 

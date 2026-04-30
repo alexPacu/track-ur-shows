@@ -1,9 +1,18 @@
+import * as v from 'valibot';
 import { createTMDBClient, buildImageUrl } from '@/lib/tmdb';
+import {
+  TMDBListResponseSchema,
+  TMDBMovieDetailsSchema,
+  TMDBShowDetailsSchema,
+  TMDBSeasonDetailsSchema,
+} from '@/server/validators/tmdb.validator';
 
-/**
- * 
- * handles API calls and data transformation
- */
+function warnIfInvalid(result: v.SafeParseResult<v.GenericSchema>, context: string): void {
+  if (!result.success) {
+    console.warn(`[TMDB] ${context} validation failed: ${result.issues[0].message}`);
+  }
+}
+
 export class TMDBService {
   private static client = createTMDBClient();
 
@@ -13,7 +22,7 @@ export class TMDBService {
   ) {
     try {
       const type = options.type || 'movie';
-      const result = (
+      const raw = (
         type === 'movie'
           ? await this.client.searchMovies(query, {
               page: options.page || 1,
@@ -25,10 +34,11 @@ export class TMDBService {
             })
       ) as any;
 
-      // transform results to include full image URLs
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'searchMovies');
+
       return {
-        ...result,
-        results: result.results.map((item: any) => ({
+        ...raw,
+        results: raw.results.map((item: any) => ({
           ...item,
           media_type: type,
           poster_url: buildImageUrl(item.poster_path, 'w342'),
@@ -43,20 +53,22 @@ export class TMDBService {
 
   static async getMovieDetails(movieId: number) {
     try {
-      const movie = (await this.client.getMovieDetails(movieId, {
+      const raw = (await this.client.getMovieDetails(movieId, {
         appendToResponse: ['videos', 'credits', 'images', 'watch/providers'],
       })) as any;
 
+      warnIfInvalid(v.safeParse(TMDBMovieDetailsSchema, raw), 'getMovieDetails');
+
       return {
-        ...movie,
+        ...raw,
         media_type: 'movie',
-        poster_url: buildImageUrl(movie.poster_path, 'w500'),
-        backdrop_url: buildImageUrl(movie.backdrop_path, 'w1280'),
-        genres: movie.genres || [],
-        credits: movie.credits || { cast: [], crew: [] },
-        videos: movie.videos?.results || [],
-        images: movie.images || { backdrops: [], posters: [], logos: [] },
-        watch_providers: (movie['watch/providers'] as any)?.results || {},
+        poster_url: buildImageUrl(raw.poster_path, 'w500'),
+        backdrop_url: buildImageUrl(raw.backdrop_path, 'w1280'),
+        genres: raw.genres || [],
+        credits: raw.credits || { cast: [], crew: [] },
+        videos: raw.videos?.results || [],
+        images: raw.images || { backdrops: [], posters: [], logos: [] },
+        watch_providers: (raw['watch/providers'] as any)?.results || {},
       };
     } catch (error) {
       console.error('TMDBService.getMovieDetails error:', error);
@@ -66,20 +78,22 @@ export class TMDBService {
 
   static async getTVShowDetails(seriesId: number) {
     try {
-      const show = (await this.client.getTVShowDetails(seriesId, {
+      const raw = (await this.client.getTVShowDetails(seriesId, {
         appendToResponse: ['videos', 'credits', 'images', 'watch/providers'],
       })) as any;
 
+      warnIfInvalid(v.safeParse(TMDBShowDetailsSchema, raw), 'getTVShowDetails');
+
       return {
-        ...show,
+        ...raw,
         media_type: 'tv',
-        poster_url: buildImageUrl(show.poster_path, 'w500'),
-        backdrop_url: buildImageUrl(show.backdrop_path, 'w1280'),
-        genres: show.genres || [],
-        credits: show.credits || { cast: [], crew: [] },
-        videos: show.videos?.results || [],
-        images: show.images || { backdrops: [], posters: [], logos: [] },
-        watch_providers: (show['watch/providers'] as any)?.results || {},
+        poster_url: buildImageUrl(raw.poster_path, 'w500'),
+        backdrop_url: buildImageUrl(raw.backdrop_path, 'w1280'),
+        genres: raw.genres || [],
+        credits: raw.credits || { cast: [], crew: [] },
+        videos: raw.videos?.results || [],
+        images: raw.images || { backdrops: [], posters: [], logos: [] },
+        watch_providers: (raw['watch/providers'] as any)?.results || {},
       };
     } catch (error) {
       console.error('TMDBService.getTVShowDetails error:', error);
@@ -89,10 +103,13 @@ export class TMDBService {
 
   static async getTVSeasonDetails(seriesId: number, seasonNumber: number) {
     try {
-      const result = (await this.client.getTVSeasonDetails(seriesId, seasonNumber)) as any;
+      const raw = (await this.client.getTVSeasonDetails(seriesId, seasonNumber)) as any;
+
+      warnIfInvalid(v.safeParse(TMDBSeasonDetailsSchema, raw), 'getTVSeasonDetails');
+
       return {
-        ...result,
-        episodes: (result.episodes || []).map((ep: any) => ({
+        ...raw,
+        episodes: (raw.episodes || []).map((ep: any) => ({
           ...ep,
           still_url: buildImageUrl(ep.still_path, 'w300'),
         })),
@@ -105,11 +122,13 @@ export class TMDBService {
 
   static async getTrendingMovies(timeWindow: 'day' | 'week' = 'day') {
     try {
-      const result = (await this.client.getTrendingMovies(timeWindow)) as any;
+      const raw = (await this.client.getTrendingMovies(timeWindow)) as any;
+
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'getTrendingMovies');
 
       return {
-        ...result,
-        results: result.results.map((item: any) => ({
+        ...raw,
+        results: raw.results.map((item: any) => ({
           ...item,
           media_type: 'movie',
           poster_url: buildImageUrl(item.poster_path, 'w342'),
@@ -124,11 +143,13 @@ export class TMDBService {
 
   static async getTrendingTV(timeWindow: 'day' | 'week' = 'day') {
     try {
-      const result = (await this.client.getTrendingTV(timeWindow)) as any;
+      const raw = (await this.client.getTrendingTV(timeWindow)) as any;
+
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'getTrendingTV');
 
       return {
-        ...result,
-        results: result.results.map((item: any) => ({
+        ...raw,
+        results: raw.results.map((item: any) => ({
           ...item,
           media_type: 'tv',
           poster_url: buildImageUrl(item.poster_path, 'w342'),
@@ -136,20 +157,20 @@ export class TMDBService {
         })),
       };
     } catch (error) {
-      console.error('TMDBService.getTrendingTV error:', error);
+      console.error('TMDBService.getTrendingShows error:', error);
       throw error;
     }
   }
 
   static async getPopularMovies(options: { page?: number } = {}) {
     try {
-      const result = (await this.client.getPopularMovies({
-        page: options.page || 1,
-      })) as any;
+      const raw = (await this.client.getPopularMovies({ page: options.page || 1 })) as any;
+
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'getPopularMovies');
 
       return {
-        ...result,
-        results: result.results.map((item: any) => ({
+        ...raw,
+        results: raw.results.map((item: any) => ({
           ...item,
           media_type: 'movie',
           poster_url: buildImageUrl(item.poster_path, 'w342'),
@@ -164,13 +185,13 @@ export class TMDBService {
 
   static async getPopularTV(options: { page?: number } = {}) {
     try {
-      const result = (await this.client.getPopularTV({
-        page: options.page || 1,
-      })) as any;
+      const raw = (await this.client.getPopularTV({ page: options.page || 1 })) as any;
+
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'getPopularTV');
 
       return {
-        ...result,
-        results: result.results.map((item: any) => ({
+        ...raw,
+        results: raw.results.map((item: any) => ({
           ...item,
           media_type: 'tv',
           poster_url: buildImageUrl(item.poster_path, 'w342'),
@@ -178,20 +199,20 @@ export class TMDBService {
         })),
       };
     } catch (error) {
-      console.error('TMDBService.getPopularTV error:', error);
+      console.error('TMDBService.getPopularShows error:', error);
       throw error;
     }
   }
 
   static async getTopRatedMovies(options: { page?: number } = {}) {
     try {
-      const result = (await this.client.getTopRatedMovies({
-        page: options.page || 1,
-      })) as any;
+      const raw = (await this.client.getTopRatedMovies({ page: options.page || 1 })) as any;
+
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'getTopRatedMovies');
 
       return {
-        ...result,
-        results: result.results.map((item: any) => ({
+        ...raw,
+        results: raw.results.map((item: any) => ({
           ...item,
           media_type: 'movie',
           poster_url: buildImageUrl(item.poster_path, 'w342'),
@@ -206,13 +227,13 @@ export class TMDBService {
 
   static async getTopRatedShows(options: { page?: number } = {}) {
     try {
-      const result = (await this.client.getTopRatedTV({
-        page: options.page || 1,
-      })) as any;
+      const raw = (await this.client.getTopRatedTV({ page: options.page || 1 })) as any;
+
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'getTopRatedShows');
 
       return {
-        ...result,
-        results: result.results.map((item: any) => ({
+        ...raw,
+        results: raw.results.map((item: any) => ({
           ...item,
           media_type: 'tv',
           poster_url: buildImageUrl(item.poster_path, 'w342'),
@@ -227,15 +248,17 @@ export class TMDBService {
 
   static async discoverMovies(options: { with_genres?: string; with_watch_providers?: string; page?: number } = {}) {
     try {
-      const result = (await this.client.discoverMovies({
+      const raw = (await this.client.discoverMovies({
         page: options.page || 1,
         with_genres: options.with_genres,
         with_watch_providers: options.with_watch_providers,
       })) as any;
 
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'discoverMovies');
+
       return {
-        ...result,
-        results: result.results.map((item: any) => ({
+        ...raw,
+        results: raw.results.map((item: any) => ({
           ...item,
           media_type: 'movie',
           poster_url: buildImageUrl(item.poster_path, 'w342'),
@@ -250,15 +273,17 @@ export class TMDBService {
 
   static async discoverTV(options: { with_genres?: string; with_watch_providers?: string; page?: number } = {}) {
     try {
-      const result = (await this.client.discoverTV({
+      const raw = (await this.client.discoverTV({
         page: options.page || 1,
         with_genres: options.with_genres,
         with_watch_providers: options.with_watch_providers,
       })) as any;
 
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'discoverTV');
+
       return {
-        ...result,
-        results: result.results.map((item: any) => ({
+        ...raw,
+        results: raw.results.map((item: any) => ({
           ...item,
           media_type: 'tv',
           poster_url: buildImageUrl(item.poster_path, 'w342'),

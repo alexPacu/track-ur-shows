@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as v from 'valibot';
 import { extractUserFromRequest } from '@/server/middlewares/auth.middleware';
 import { UserRepository } from '@/server/repositories/user.repo';
+import { ProfilePutSchema } from '@/server/validators/profile.validator';
 import { db } from '@/lib/db';
 import { sql } from 'kysely';
 
@@ -108,15 +110,11 @@ export async function PUT(req: NextRequest) {
 
     await ensureColumns();
 
-    const body = await req.json();
-    const { profile_picture_url, background_image_url } = body;
-
-    if (profile_picture_url && profile_picture_url.length > 3_000_000) {
-      return NextResponse.json({ error: 'Profile picture too large (max ~2 MB)' }, { status: 400 });
+    const parsed = v.safeParse(ProfilePutSchema, await req.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.issues[0].message }, { status: 400 });
     }
-    if (background_image_url && background_image_url.length > 6_000_000) {
-      return NextResponse.json({ error: 'Background image too large (max ~4 MB)' }, { status: 400 });
-    }
+    const { profile_picture_url, background_image_url } = parsed.output;
 
     await UserRepository.update(user.userId, {
       ...(profile_picture_url !== undefined ? { profile_picture_url } : {}),

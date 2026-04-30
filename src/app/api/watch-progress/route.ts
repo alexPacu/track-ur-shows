@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as v from 'valibot';
 import { extractUserFromRequest } from '@/server/middlewares/auth.middleware';
 import { WatchProgressRepository } from '@/server/repositories/watch-progress.repo';
+import { WatchProgressPostSchema, WatchProgressDeleteSchema } from '@/server/validators/watch-progress.validator';
 
 export async function GET(req: NextRequest) {
   const user = extractUserFromRequest(req);
@@ -20,24 +22,11 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const body = await req.json();
-    const {
-      tmdbId,
-      mediaType,
-      season,
-      episode,
-      progressSeconds,
-      durationSeconds,
-      progressPercent,
-      title,
-      posterPath,
-      backdropPath,
-      completed,
-    } = body;
-
-    if (!tmdbId || !mediaType || (mediaType !== 'movie' && mediaType !== 'tv')) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+    const parsed = v.safeParse(WatchProgressPostSchema, await req.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.issues[0].message }, { status: 400 });
     }
+    const { tmdbId, mediaType, season, episode, progressSeconds, durationSeconds, progressPercent, title, posterPath, backdropPath, completed } = parsed.output;
 
     // treat >=92% as completed so it drops off the continue-watching row
     const autoCompleted =
@@ -45,13 +34,13 @@ export async function POST(req: NextRequest) {
 
     const saved = await WatchProgressRepository.upsert({
       userId: user.userId,
-      tmdbId: Number(tmdbId),
+      tmdbId,
       mediaType,
-      season: season ? Number(season) : 0,
-      episode: episode ? Number(episode) : 0,
-      progressSeconds: progressSeconds ? Math.floor(Number(progressSeconds)) : 0,
-      durationSeconds: durationSeconds ? Math.floor(Number(durationSeconds)) : 0,
-      progressPercent: typeof progressPercent === 'number' ? progressPercent : 0,
+      season: season ?? 0,
+      episode: episode ?? 0,
+      progressSeconds: progressSeconds !== undefined ? Math.floor(progressSeconds) : 0,
+      durationSeconds: durationSeconds !== undefined ? Math.floor(durationSeconds) : 0,
+      progressPercent: progressPercent ?? 0,
       title,
       posterPath,
       backdropPath,
@@ -71,14 +60,11 @@ export async function DELETE(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const tmdbId = Number(searchParams.get('tmdbId'));
-    const mediaType = searchParams.get('mediaType') as 'movie' | 'tv' | null;
-    const season = Number(searchParams.get('season') ?? 0);
-    const episode = Number(searchParams.get('episode') ?? 0);
-
-    if (!tmdbId || !mediaType) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+    const parsed = v.safeParse(WatchProgressDeleteSchema, Object.fromEntries(searchParams.entries()));
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.issues[0].message }, { status: 400 });
     }
+    const { tmdbId, mediaType, season, episode } = parsed.output;
 
     await WatchProgressRepository.deleteEntry(user.userId, tmdbId, mediaType, season, episode);
     return NextResponse.json({ success: true });
