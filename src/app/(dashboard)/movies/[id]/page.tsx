@@ -463,7 +463,6 @@ export default function MovieDetailPage() {
             height="100%"
             allowFullScreen
             allow="autoplay; fullscreen"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
             className="w-full h-full border-0"
           />
         </div>

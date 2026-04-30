@@ -1,6 +1,5 @@
 import { UserRepository } from '@/server/repositories/user.repo';
 import { hashPassword, verifyPassword, generateToken } from '@/lib/auth';
-import { validateRegisterInput, validateLoginInput } from '@/server/validators/auth.validator';
 
 export interface AuthResponse {
   user: {
@@ -17,11 +16,6 @@ export class UserService {
     username: string,
     password: string
   ): Promise<AuthResponse> {
-    const validation = validateRegisterInput({ email, username, password, confirmPassword: password }); // validation
-    if (!validation.valid) {
-      throw new Error(validation.errors.map((e) => e.message).join(', '));
-    }
-
     const existingEmail = await UserRepository.findByEmail(email);  // checking for existing email
     if (existingEmail) {
       throw new Error('Email already registered');
@@ -49,11 +43,6 @@ export class UserService {
   }
 
   static async login(email: string, password: string): Promise<AuthResponse> {
-    const validation = validateLoginInput({ email, password });
-    if (!validation.valid) {
-      throw new Error(validation.errors.map((e) => e.message).join(', '));
-    }
-
     const user = await UserRepository.findByEmail(email);  // finding user by email
     if (!user) {
       throw new Error('Invalid email or password');

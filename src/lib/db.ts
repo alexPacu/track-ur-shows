@@ -1,4 +1,6 @@
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import { Kysely, PostgresDialect } from 'kysely';
+import type { Database } from './db.types';
 
 let pool: Pool;
 
@@ -75,3 +77,9 @@ export async function closePool(): Promise<void> {
     await pool.end();
   }
 }
+
+export const db = new Kysely<Database>({
+  dialect: new PostgresDialect({
+    pool: getPool(),
+  }),
+});

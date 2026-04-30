@@ -1,4 +1,4 @@
-import { query, queryOne, queryMany } from '@/lib/db';
+import { db } from '@/lib/db';
 
 export interface ChatConversation {
   id: number;
@@ -32,166 +32,125 @@ export interface UserPreferences {
 
 export class ChatRepository {
   static async createConversation(userId: number): Promise<ChatConversation> {
-    const result = await queryOne<ChatConversation>(
-      `INSERT INTO chat_conversations (user_id) VALUES ($1) RETURNING *`,
-      [userId]
-    );
-    if (!result) throw new Error('Failed to create conversation');
-    return result;
+    const result = await db
+      .insertInto('chat_conversations')
+      .values({ user_id: userId })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return result as unknown as ChatConversation;
   }
 
   static async getConversation(id: number): Promise<ChatConversation | null> {
-    return queryOne<ChatConversation>(
-      `SELECT * FROM chat_conversations WHERE id = $1`,
-      [id]
-    );
+    const result = await db.selectFrom('chat_conversations').selectAll().where('id', '=', id).executeTakeFirst();
+    return result ? (result as unknown as ChatConversation) : null;
   }
 
-  static async getUserConversations(
-    userId: number,
-    limit: number = 20,
-    offset: number = 0
-  ): Promise<ChatConversation[]> {
-    return queryMany<ChatConversation>(
-      `SELECT * FROM chat_conversations
-       WHERE user_id = $1
-       ORDER BY updated_at DESC
-       LIMIT $2 OFFSET $3`,
-      [userId, limit, offset]
-    );
+  static async getUserConversations(userId: number, limit: number = 20, offset: number = 0): Promise<ChatConversation[]> {
+    const rows = await db
+      .selectFrom('chat_conversations')
+      .selectAll()
+      .where('user_id', '=', userId)
+      .orderBy('updated_at', 'desc')
+      .limit(limit)
+      .offset(offset)
+      .execute();
+    return rows as unknown as ChatConversation[];
   }
 
   static async getActiveConversation(userId: number): Promise<ChatConversation | null> {
-    return queryOne<ChatConversation>(
-      `SELECT * FROM chat_conversations
-       WHERE user_id = $1 AND is_active = TRUE
-       ORDER BY updated_at DESC
-       LIMIT 1`,
-      [userId]
-    );
+    const result = await db
+      .selectFrom('chat_conversations')
+      .selectAll()
+      .where('user_id', '=', userId)
+      .where('is_active', '=', true)
+      .orderBy('updated_at', 'desc')
+      .limit(1)
+      .executeTakeFirst();
+    return result ? (result as unknown as ChatConversation) : null;
   }
 
   static async closeConversation(id: number): Promise<ChatConversation | null> {
-    return queryOne<ChatConversation>(
-      `UPDATE chat_conversations SET is_active = FALSE WHERE id = $1 RETURNING *`,
-      [id]
-    );
+    const result = await db
+      .updateTable('chat_conversations')
+      .set({ is_active: false })
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirst();
+    return result ? (result as unknown as ChatConversation) : null;
   }
 
-  static async addMessage(
-    conversationId: number,
-    role: 'user' | 'assistant',
-    content: string
-  ): Promise<ChatMessage> {
-    const result = await queryOne<ChatMessage>(
-      `INSERT INTO chat_messages (conversation_id, role, content)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
-      [conversationId, role, content]
-    );
-    if (!result) throw new Error('Failed to add message');
+  static async addMessage(conversationId: number, role: 'user' | 'assistant', content: string): Promise<ChatMessage> {
+    const message = await db
+      .insertInto('chat_messages')
+      .values({ conversation_id: conversationId, role, content })
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-    await query(
-      `UPDATE chat_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-      [conversationId]
-    );
+    await db
+      .updateTable('chat_conversations')
+      .set({ updated_at: new Date() })
+      .where('id', '=', conversationId)
+      .execute();
 
-    return result;
+    return message as unknown as ChatMessage;
   }
 
-  static async getMessages(
-    conversationId: number,
-    limit: number = 100,
-    offset: number = 0
-  ): Promise<ChatMessage[]> {
-    return queryMany<ChatMessage>(
-      `SELECT * FROM chat_messages
-       WHERE conversation_id = $1
-       ORDER BY created_at ASC
-       LIMIT $2 OFFSET $3`,
-      [conversationId, limit, offset]
-    );
+  static async getMessages(conversationId: number, limit: number = 100, offset: number = 0): Promise<ChatMessage[]> {
+    const rows = await db
+      .selectFrom('chat_messages')
+      .selectAll()
+      .where('conversation_id', '=', conversationId)
+      .orderBy('created_at', 'asc')
+      .limit(limit)
+      .offset(offset)
+      .execute();
+    return rows as unknown as ChatMessage[];
   }
 
   static async getPreferences(userId: number): Promise<UserPreferences | null> {
-    return queryOne<UserPreferences>(
-      `SELECT * FROM user_preferences WHERE user_id = $1`,
-      [userId]
-    );
+    const result = await db.selectFrom('user_preferences').selectAll().where('user_id', '=', userId).executeTakeFirst();
+    return result ? (result as unknown as UserPreferences) : null;
   }
 
-  static async createOrUpdatePreferences(
-    userId: number,
-    data: Partial<UserPreferences>
-  ): Promise<UserPreferences> {
+  static async createOrUpdatePreferences(userId: number, data: Partial<UserPreferences>): Promise<UserPreferences> {
     const existing = await this.getPreferences(userId);
 
     if (!existing) {
-      const result = await queryOne<UserPreferences>(
-        `INSERT INTO user_preferences (
-          user_id, favorite_genres, favorite_networks, mood_preferences,
-          preferred_languages, watch_time_preference, min_rating_threshold,
-          max_runtime_preference
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING *`,
-        [
-          userId,
-          data.favorite_genres ? JSON.stringify(data.favorite_genres) : null,
-          data.favorite_networks ? JSON.stringify(data.favorite_networks) : null,
-          data.mood_preferences ? JSON.stringify(data.mood_preferences) : null,
-          data.preferred_languages ? JSON.stringify(data.preferred_languages) : null,
-          data.watch_time_preference,
-          data.min_rating_threshold,
-          data.max_runtime_preference,
-        ]
-      );
-      if (!result) throw new Error('Failed to create preferences');
-      return result;
+      const result = await db
+        .insertInto('user_preferences')
+        .values({
+          user_id: userId,
+          favorite_genres: data.favorite_genres ? JSON.stringify(data.favorite_genres) : null,
+          favorite_networks: data.favorite_networks ? JSON.stringify(data.favorite_networks) : null,
+          mood_preferences: data.mood_preferences ? JSON.stringify(data.mood_preferences) : null,
+          preferred_languages: data.preferred_languages ? JSON.stringify(data.preferred_languages) : null,
+          watch_time_preference: data.watch_time_preference ?? null,
+          min_rating_threshold: data.min_rating_threshold ?? null,
+          max_runtime_preference: data.max_runtime_preference ?? null,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      return result as unknown as UserPreferences;
     }
 
-    const updates: string[] = [];
-    const values: any[] = [];
-    let paramCount = 1;
+    const updates: Record<string, unknown> = {};
+    if (data.favorite_genres !== undefined) updates.favorite_genres = data.favorite_genres ? JSON.stringify(data.favorite_genres) : null;
+    if (data.favorite_networks !== undefined) updates.favorite_networks = data.favorite_networks ? JSON.stringify(data.favorite_networks) : null;
+    if (data.mood_preferences !== undefined) updates.mood_preferences = data.mood_preferences ? JSON.stringify(data.mood_preferences) : null;
+    if (data.preferred_languages !== undefined) updates.preferred_languages = data.preferred_languages ? JSON.stringify(data.preferred_languages) : null;
+    if (data.watch_time_preference !== undefined) updates.watch_time_preference = data.watch_time_preference;
+    if (data.min_rating_threshold !== undefined) updates.min_rating_threshold = data.min_rating_threshold;
+    if (data.max_runtime_preference !== undefined) updates.max_runtime_preference = data.max_runtime_preference;
+    if (Object.keys(updates).length === 0) return existing;
+    updates.updated_at = new Date();
 
-    if (data.favorite_genres !== undefined) {
-      updates.push(`favorite_genres = $${paramCount++}`);
-      values.push(data.favorite_genres ? JSON.stringify(data.favorite_genres) : null);
-    }
-    if (data.favorite_networks !== undefined) {
-      updates.push(`favorite_networks = $${paramCount++}`);
-      values.push(data.favorite_networks ? JSON.stringify(data.favorite_networks) : null);
-    }
-    if (data.mood_preferences !== undefined) {
-      updates.push(`mood_preferences = $${paramCount++}`);
-      values.push(data.mood_preferences ? JSON.stringify(data.mood_preferences) : null);
-    }
-    if (data.preferred_languages !== undefined) {
-      updates.push(`preferred_languages = $${paramCount++}`);
-      values.push(data.preferred_languages ? JSON.stringify(data.preferred_languages) : null);
-    }
-    if (data.watch_time_preference !== undefined) {
-      updates.push(`watch_time_preference = $${paramCount++}`);
-      values.push(data.watch_time_preference);
-    }
-    if (data.min_rating_threshold !== undefined) {
-      updates.push(`min_rating_threshold = $${paramCount++}`);
-      values.push(data.min_rating_threshold);
-    }
-    if (data.max_runtime_preference !== undefined) {
-      updates.push(`max_runtime_preference = $${paramCount++}`);
-      values.push(data.max_runtime_preference);
-    }
-
-    if (updates.length === 0) return existing;
-
-    updates.push(`updated_at = CURRENT_TIMESTAMP`);
-    values.push(userId);
-
-    const result = await queryOne<UserPreferences>(
-      `UPDATE user_preferences SET ${updates.join(', ')} WHERE user_id = $${paramCount} RETURNING *`,
-      values
-    );
+    const result = await db
+      .updateTable('user_preferences')
+      .set(updates as any)
+      .where('user_id', '=', userId)
+      .returningAll()
+      .executeTakeFirst();
     if (!result) throw new Error('Failed to update preferences');
-    return result;
+    return result as unknown as UserPreferences;
   }
 }

@@ -1,4 +1,5 @@
-import { query, queryOne, queryMany } from '@/lib/db';
+import { db } from '@/lib/db';
+import { sql } from 'kysely';
 
 export type UserLibraryStatus = 'watching' | 'completed' | 'dropped' | 'paused' | 'planning_to_watch';
 
@@ -30,29 +31,23 @@ export interface UserEpisode {
 }
 
 export class UserLibraryRepository {
-  static async addShow(
-    userId: number,
-    showId: number,
-    status: UserLibraryStatus = 'planning_to_watch'
-  ): Promise<UserLibrary> {
-    const result = await queryOne<UserLibrary>(
-      `INSERT INTO user_library (user_id, show_id, status)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
-      [userId, showId, status]
-    );
-    if (!result) throw new Error('Failed to add show to library');
-    return result;
+  static async addShow(userId: number, showId: number, status: UserLibraryStatus = 'planning_to_watch'): Promise<UserLibrary> {
+    const result = await db
+      .insertInto('user_library')
+      .values({ user_id: userId, show_id: showId, status })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return result as unknown as UserLibrary;
   }
 
-  static async findByUserAndShow(
-    userId: number,
-    showId: number
-  ): Promise<UserLibrary | null> {
-    return queryOne<UserLibrary>(
-      `SELECT * FROM user_library WHERE user_id = $1 AND show_id = $2`,
-      [userId, showId]
-    );
+  static async findByUserAndShow(userId: number, showId: number): Promise<UserLibrary | null> {
+    const result = await db
+      .selectFrom('user_library')
+      .selectAll()
+      .where('user_id', '=', userId)
+      .where('show_id', '=', showId)
+      .executeTakeFirst();
+    return result ? (result as unknown as UserLibrary) : null;
   }
 
   static async getByUser(
@@ -61,36 +56,21 @@ export class UserLibraryRepository {
     limit: number = 50,
     offset: number = 0
   ): Promise<UserLibrary[]> {
-    if (status) {
-      return queryMany<UserLibrary>(
-        `SELECT * FROM user_library
-         WHERE user_id = $1 AND status = $2
-         ORDER BY updated_at DESC
-         LIMIT $3 OFFSET $4`,
-        [userId, status, limit, offset]
-      );
-    }
-    return queryMany<UserLibrary>(
-      `SELECT * FROM user_library
-       WHERE user_id = $1
-       ORDER BY updated_at DESC
-       LIMIT $2 OFFSET $3`,
-      [userId, limit, offset]
-    );
+    let query = db.selectFrom('user_library').selectAll().where('user_id', '=', userId);
+    if (status) query = query.where('status', '=', status);
+    const rows = await query.orderBy('updated_at', 'desc').limit(limit).offset(offset).execute();
+    return rows as unknown as UserLibrary[];
   }
 
-  static async updateStatus(
-    userId: number,
-    showId: number,
-    status: UserLibraryStatus
-  ): Promise<UserLibrary | null> {
-    return queryOne<UserLibrary>(
-      `UPDATE user_library
-       SET status = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $2 AND show_id = $3
-       RETURNING *`,
-      [status, userId, showId]
-    );
+  static async updateStatus(userId: number, showId: number, status: UserLibraryStatus): Promise<UserLibrary | null> {
+    const result = await db
+      .updateTable('user_library')
+      .set({ status, updated_at: new Date() })
+      .where('user_id', '=', userId)
+      .where('show_id', '=', showId)
+      .returningAll()
+      .executeTakeFirst();
+    return result ? (result as unknown as UserLibrary) : null;
   }
 
   static async updateProgress(
@@ -103,120 +83,85 @@ export class UserLibraryRepository {
       times_rewatched?: number;
     }
   ): Promise<UserLibrary | null> {
-    const updates: string[] = [];
-    const values: any[] = [];
-    let paramCount = 1;
-
-    if (data.current_season !== undefined) {
-      updates.push(`current_season = $${paramCount++}`);
-      values.push(data.current_season);
-    }
-    if (data.current_episode !== undefined) {
-      updates.push(`current_episode = $${paramCount++}`);
-      values.push(data.current_episode);
-    }
-    if (data.hours_watched !== undefined) {
-      updates.push(`hours_watched = $${paramCount++}`);
-      values.push(data.hours_watched);
-    }
-    if (data.times_rewatched !== undefined) {
-      updates.push(`times_rewatched = $${paramCount++}`);
-      values.push(data.times_rewatched);
-    }
-
-    if (updates.length === 0) {
-      return this.findByUserAndShow(userId, showId);
-    }
-
-    updates.push(`updated_at = CURRENT_TIMESTAMP`);
-    values.push(userId, showId);
-    const paramCount2 = paramCount + 2;
-
-    return queryOne<UserLibrary>(
-      `UPDATE user_library
-       SET ${updates.join(', ')}
-       WHERE user_id = $${paramCount2 - 1} AND show_id = $${paramCount2}
-       RETURNING *`,
-      values
-    );
+    const updates: Record<string, unknown> = {};
+    if (data.current_season !== undefined) updates.current_season = data.current_season;
+    if (data.current_episode !== undefined) updates.current_episode = data.current_episode;
+    if (data.hours_watched !== undefined) updates.hours_watched = data.hours_watched;
+    if (data.times_rewatched !== undefined) updates.times_rewatched = data.times_rewatched;
+    if (Object.keys(updates).length === 0) return this.findByUserAndShow(userId, showId);
+    updates.updated_at = new Date();
+    const result = await db
+      .updateTable('user_library')
+      .set(updates as any)
+      .where('user_id', '=', userId)
+      .where('show_id', '=', showId)
+      .returningAll()
+      .executeTakeFirst();
+    return result ? (result as unknown as UserLibrary) : null;
   }
 
-  static async updateRating(
-    userId: number,
-    showId: number,
-    rating: number | null
-  ): Promise<UserLibrary | null> {
-    return queryOne<UserLibrary>(
-      `UPDATE user_library
-       SET personal_rating = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $2 AND show_id = $3
-       RETURNING *`,
-      [rating, userId, showId]
-    );
+  static async updateRating(userId: number, showId: number, rating: number | null): Promise<UserLibrary | null> {
+    const result = await db
+      .updateTable('user_library')
+      .set({ personal_rating: rating, updated_at: new Date() })
+      .where('user_id', '=', userId)
+      .where('show_id', '=', showId)
+      .returningAll()
+      .executeTakeFirst();
+    return result ? (result as unknown as UserLibrary) : null;
   }
 
-  static async toggleFavorite(
-    userId: number,
-    showId: number
-  ): Promise<UserLibrary | null> {
-    return queryOne<UserLibrary>(
-      `UPDATE user_library
-       SET is_favorite = NOT is_favorite, updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $1 AND show_id = $2
-       RETURNING *`,
-      [userId, showId]
-    );
+  static async toggleFavorite(userId: number, showId: number): Promise<UserLibrary | null> {
+    const result = await db
+      .updateTable('user_library')
+      .set({ is_favorite: sql`NOT is_favorite`, updated_at: new Date() })
+      .where('user_id', '=', userId)
+      .where('show_id', '=', showId)
+      .returningAll()
+      .executeTakeFirst();
+    return result ? (result as unknown as UserLibrary) : null;
   }
 
-  static async removeShow(
-    userId: number,
-    showId: number
-  ): Promise<boolean> {
-    const result = await query(
-      `DELETE FROM user_library WHERE user_id = $1 AND show_id = $2`,
-      [userId, showId]
-    );
-    return (result.rowCount ?? 0) > 0;
+  static async removeShow(userId: number, showId: number): Promise<boolean> {
+    const [result] = await db
+      .deleteFrom('user_library')
+      .where('user_id', '=', userId)
+      .where('show_id', '=', showId)
+      .execute();
+    return (result?.numDeletedRows ?? 0n) > 0n;
   }
 
-  static async markEpisodeWatched(
-    userId: number,
-    episodeId: number,
-    watchedDate: Date = new Date()
-  ): Promise<UserEpisode> {
-    const result = await queryOne<UserEpisode>(
-      `INSERT INTO user_episodes (user_id, episode_id, watched_date)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (user_id, episode_id) DO UPDATE
-       SET watched_date = EXCLUDED.watched_date
-       RETURNING *`,
-      [userId, episodeId, watchedDate]
-    );
-    if (!result) throw new Error('Failed to mark episode as watched');
-    return result;
+  static async markEpisodeWatched(userId: number, episodeId: number, watchedDate: Date = new Date()): Promise<UserEpisode> {
+    const result = await db
+      .insertInto('user_episodes')
+      .values({ user_id: userId, episode_id: episodeId, watched_date: watchedDate })
+      .onConflict((oc) =>
+        oc.columns(['user_id', 'episode_id']).doUpdateSet({ watched_date: sql`excluded.watched_date` })
+      )
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return result as unknown as UserEpisode;
   }
 
-  static async isEpisodeWatched(
-    userId: number,
-    episodeId: number
-  ): Promise<boolean> {
-    const result = await queryOne<{ id: number }>(
-      `SELECT id FROM user_episodes WHERE user_id = $1 AND episode_id = $2`,
-      [userId, episodeId]
-    );
+  static async isEpisodeWatched(userId: number, episodeId: number): Promise<boolean> {
+    const result = await db
+      .selectFrom('user_episodes')
+      .select('id')
+      .where('user_id', '=', userId)
+      .where('episode_id', '=', episodeId)
+      .executeTakeFirst();
     return !!result;
   }
 
-  static async getWatchedEpisodes(
-    userId: number,
-    showId: number
-  ): Promise<UserEpisode[]> {
-    return queryMany<UserEpisode>(
-      `SELECT ue.* FROM user_episodes ue
-       INNER JOIN episodes e ON ue.episode_id = e.id
-       WHERE ue.user_id = $1 AND e.show_id = $2
-       ORDER BY e.air_date ASC`,
-      [userId, showId]
-    );
+  static async getWatchedEpisodes(userId: number, showId: number): Promise<UserEpisode[]> {
+    const rows = await db
+      .selectFrom('user_episodes as ue')
+      .innerJoin('episodes as e', 'e.id', 'ue.episode_id')
+      .selectAll('ue')
+      .where('ue.user_id', '=', userId)
+      .where('e.show_id', '=', showId)
+      .orderBy('e.air_date', 'asc')
+      .execute();
+    return rows as unknown as UserEpisode[];
   }
 }

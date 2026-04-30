@@ -1,4 +1,5 @@
-import { queryOne, queryMany } from '@/lib/db';
+import { db } from '@/lib/db';
+import { sql } from 'kysely';
 
 export type RecommendationType = 'simple' | 'conversational' | 'discussion' | 'mood-based';
 export type UserFeedback = 'liked' | 'disliked' | 'neutral' | null;
@@ -20,49 +21,49 @@ export class RecommendationRepository {
     recommendationType: RecommendationType,
     conversationId?: number
   ): Promise<AIRecommendation> {
-    const result = await queryOne<AIRecommendation>(
-      `INSERT INTO ai_recommendations (user_id, conversation_id, recommended_show_id, recommendation_type)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [userId, conversationId || null, recommendedShowId, recommendationType]
-    );
-    if (!result) throw new Error('Failed to log recommendation');
-    return result;
+    const result = await db
+      .insertInto('ai_recommendations')
+      .values({
+        user_id: userId,
+        conversation_id: conversationId ?? null,
+        recommended_show_id: recommendedShowId,
+        recommendation_type: recommendationType,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return result as unknown as AIRecommendation;
   }
 
-  static async updateFeedback(
-    id: number,
-    feedback: UserFeedback
-  ): Promise<AIRecommendation | null> {
-    return queryOne<AIRecommendation>(
-      `UPDATE ai_recommendations SET user_feedback = $1 WHERE id = $2 RETURNING *`,
-      [feedback, id]
-    );
+  static async updateFeedback(id: number, feedback: UserFeedback): Promise<AIRecommendation | null> {
+    const result = await db
+      .updateTable('ai_recommendations')
+      .set({ user_feedback: feedback })
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirst();
+    return result ? (result as unknown as AIRecommendation) : null;
   }
 
-  static async getByUser(
-    userId: number,
-    limit: number = 50,
-    offset: number = 0
-  ): Promise<AIRecommendation[]> {
-    return queryMany<AIRecommendation>(
-      `SELECT * FROM ai_recommendations
-       WHERE user_id = $1
-       ORDER BY created_at DESC
-       LIMIT $2 OFFSET $3`,
-      [userId, limit, offset]
-    );
+  static async getByUser(userId: number, limit: number = 50, offset: number = 0): Promise<AIRecommendation[]> {
+    const rows = await db
+      .selectFrom('ai_recommendations')
+      .selectAll()
+      .where('user_id', '=', userId)
+      .orderBy('created_at', 'desc')
+      .limit(limit)
+      .offset(offset)
+      .execute();
+    return rows as unknown as AIRecommendation[];
   }
 
-  static async getByConversation(
-    conversationId: number
-  ): Promise<AIRecommendation[]> {
-    return queryMany<AIRecommendation>(
-      `SELECT * FROM ai_recommendations
-       WHERE conversation_id = $1
-       ORDER BY created_at DESC`,
-      [conversationId]
-    );
+  static async getByConversation(conversationId: number): Promise<AIRecommendation[]> {
+    const rows = await db
+      .selectFrom('ai_recommendations')
+      .selectAll()
+      .where('conversation_id', '=', conversationId)
+      .orderBy('created_at', 'desc')
+      .execute();
+    return rows as unknown as AIRecommendation[];
   }
 
   static async getRecommendationStats(userId: number): Promise<{
@@ -72,8 +73,8 @@ export class RecommendationRepository {
     neutral: number;
     byType: Record<RecommendationType, number>;
   }> {
-    const result = await queryOne<any>(
-      `SELECT
+    const result = await sql<any>`
+      SELECT
         COUNT(*) as total,
         COUNT(CASE WHEN user_feedback = 'liked' THEN 1 END) as liked,
         COUNT(CASE WHEN user_feedback = 'disliked' THEN 1 END) as disliked,
@@ -83,55 +84,49 @@ export class RecommendationRepository {
         COUNT(CASE WHEN recommendation_type = 'discussion' THEN 1 END) as discussion_count,
         COUNT(CASE WHEN recommendation_type = 'mood-based' THEN 1 END) as mood_count
        FROM ai_recommendations
-       WHERE user_id = $1`,
-      [userId]
-    );
+       WHERE user_id = ${userId}
+    `.execute(db);
 
-    if (!result) {
+    const row = result.rows[0];
+    if (!row) {
       return {
         total: 0,
         liked: 0,
         disliked: 0,
         neutral: 0,
-        byType: {
-          simple: 0,
-          conversational: 0,
-          discussion: 0,
-          'mood-based': 0,
-        },
+        byType: { simple: 0, conversational: 0, discussion: 0, 'mood-based': 0 },
       };
     }
 
     return {
-      total: parseInt(result.total),
-      liked: parseInt(result.liked),
-      disliked: parseInt(result.disliked),
-      neutral: parseInt(result.neutral),
+      total: parseInt(row.total),
+      liked: parseInt(row.liked),
+      disliked: parseInt(row.disliked),
+      neutral: parseInt(row.neutral),
       byType: {
-        simple: parseInt(result.simple_count),
-        conversational: parseInt(result.conversational_count),
-        discussion: parseInt(result.discussion_count),
-        'mood-based': parseInt(result.mood_count),
+        simple: parseInt(row.simple_count),
+        conversational: parseInt(row.conversational_count),
+        discussion: parseInt(row.discussion_count),
+        'mood-based': parseInt(row.mood_count),
       },
     };
   }
 
-  static async getMostLikedRecommendations(
-    userId: number,
-    limit: number = 10
-  ): Promise<AIRecommendation[]> {
-    return queryMany<AIRecommendation>(
-      `SELECT * FROM ai_recommendations
-       WHERE user_id = $1 AND user_feedback = 'liked'
-       ORDER BY created_at DESC
-       LIMIT $2`,
-      [userId, limit]
-    );
+  static async getMostLikedRecommendations(userId: number, limit: number = 10): Promise<AIRecommendation[]> {
+    const rows = await db
+      .selectFrom('ai_recommendations')
+      .selectAll()
+      .where('user_id', '=', userId)
+      .where('user_feedback', '=', 'liked')
+      .orderBy('created_at', 'desc')
+      .limit(limit)
+      .execute();
+    return rows as unknown as AIRecommendation[];
   }
 
   static async getSuccessRate(userId: number): Promise<number> {
-    const result = await queryOne<{ rate: string }>(
-      `SELECT
+    const result = await sql<{ rate: string }>`
+      SELECT
         COALESCE(
           ROUND(
             COUNT(CASE WHEN user_feedback = 'liked' THEN 1 END)::numeric /
@@ -140,9 +135,9 @@ export class RecommendationRepository {
           ), 0
         ) as rate
        FROM ai_recommendations
-       WHERE user_id = $1 AND user_feedback IS NOT NULL`,
-      [userId]
-    );
-    return result ? parseFloat(result.rate) : 0;
+       WHERE user_id = ${userId} AND user_feedback IS NOT NULL
+    `.execute(db);
+    const row = result.rows[0];
+    return row ? parseFloat(row.rate) : 0;
   }
 }

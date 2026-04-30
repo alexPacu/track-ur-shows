@@ -1,4 +1,4 @@
-import { query, queryOne } from '@/lib/db';
+import { db } from '@/lib/db';
 
 export interface User {
   id: number;
@@ -22,119 +22,71 @@ export interface UserStats {
 }
 
 export class UserRepository {
-  static async create(
-    email: string,
-    username: string,
-    passwordHash: string
-  ): Promise<User> {
-    const result = await queryOne<User>(
-      `INSERT INTO users (email, username, password_hash)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
-      [email, username, passwordHash]
-    );
-    if (!result) throw new Error('Failed to create user');
+  static async create(email: string, username: string, passwordHash: string): Promise<User> {
+    const user = await db
+      .insertInto('users')
+      .values({ email, username, password_hash: passwordHash })
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-    await query(
-      `INSERT INTO user_stats (user_id) VALUES ($1)`,
-      [result.id]
-    );
+    await db.insertInto('user_stats').values({ user_id: user.id }).execute();
 
-    return result;
+    return user as unknown as User;
   }
 
   static async findById(id: number): Promise<User | null> {
-    return queryOne<User>(
-      `SELECT * FROM users WHERE id = $1`,
-      [id]
-    );
+    const result = await db.selectFrom('users').selectAll().where('id', '=', id).executeTakeFirst();
+    return (result as unknown as User) ?? null;
   }
 
   static async findByEmail(email: string): Promise<User | null> {
-    return queryOne<User>(
-      `SELECT * FROM users WHERE email = $1`,
-      [email]
-    );
+    const result = await db.selectFrom('users').selectAll().where('email', '=', email).executeTakeFirst();
+    return (result as unknown as User) ?? null;
   }
 
   static async findByUsername(username: string): Promise<User | null> {
-    return queryOne<User>(
-      `SELECT * FROM users WHERE username = $1`,
-      [username]
-    );
+    const result = await db.selectFrom('users').selectAll().where('username', '=', username).executeTakeFirst();
+    return (result as unknown as User) ?? null;
   }
 
-  static async update(
-    id: number,
-    data: Partial<User>
-  ): Promise<User | null> {
-    const updates: string[] = [];
-    const values: any[] = [];
-    let paramCount = 1;
-
-    if (data.profile_picture_url !== undefined) {
-      updates.push(`profile_picture_url = $${paramCount++}`);
-      values.push(data.profile_picture_url);
-    }
-    if (data.background_image_url !== undefined) {
-      updates.push(`background_image_url = $${paramCount++}`);
-      values.push(data.background_image_url);
-    }
-
-    if (updates.length === 0) return this.findById(id);
-
-    updates.push(`updated_at = CURRENT_TIMESTAMP`);
-    values.push(id);
-
-    return queryOne<User>(
-      `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`,
-      values
-    );
+  static async update(id: number, data: Partial<User>): Promise<User | null> {
+    const updates: Record<string, unknown> = {};
+    if (data.profile_picture_url !== undefined) updates.profile_picture_url = data.profile_picture_url;
+    if (data.background_image_url !== undefined) updates.background_image_url = data.background_image_url;
+    if (Object.keys(updates).length === 0) return this.findById(id);
+    updates.updated_at = new Date();
+    const result = await db
+      .updateTable('users')
+      .set(updates as any)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirst();
+    return result ? (result as unknown as User) : null;
   }
 
   static async getStats(userId: number): Promise<UserStats | null> {
-    return queryOne<UserStats>(
-      `SELECT * FROM user_stats WHERE user_id = $1`,
-      [userId]
-    );
+    const result = await db.selectFrom('user_stats').selectAll().where('user_id', '=', userId).executeTakeFirst();
+    return result ? (result as unknown as UserStats) : null;
   }
 
-  static async updateStats(
-    userId: number,
-    data: Partial<UserStats>
-  ): Promise<UserStats | null> {
-    const updates: string[] = [];
-    const values: any[] = [];
-    let paramCount = 1;
-
-    if (data.total_shows_watched !== undefined) {
-      updates.push(`total_shows_watched = $${paramCount++}`);
-      values.push(data.total_shows_watched);
-    }
-    if (data.total_episodes_watched !== undefined) {
-      updates.push(`total_episodes_watched = $${paramCount++}`);
-      values.push(data.total_episodes_watched);
-    }
-    if (data.total_hours_watched !== undefined) {
-      updates.push(`total_hours_watched = $${paramCount++}`);
-      values.push(data.total_hours_watched);
-    }
-    if (data.average_rating !== undefined) {
-      updates.push(`average_rating = $${paramCount++}`);
-      values.push(data.average_rating);
-    }
-
-    updates.push(`updated_at = CURRENT_TIMESTAMP`);
-    values.push(userId);
-
-    return queryOne<UserStats>(
-      `UPDATE user_stats SET ${updates.join(', ')} WHERE user_id = $${paramCount} RETURNING *`,
-      values
-    );
+  static async updateStats(userId: number, data: Partial<UserStats>): Promise<UserStats | null> {
+    const updates: Record<string, unknown> = {};
+    if (data.total_shows_watched !== undefined) updates.total_shows_watched = data.total_shows_watched;
+    if (data.total_episodes_watched !== undefined) updates.total_episodes_watched = data.total_episodes_watched;
+    if (data.total_hours_watched !== undefined) updates.total_hours_watched = data.total_hours_watched;
+    if (data.average_rating !== undefined) updates.average_rating = data.average_rating;
+    updates.updated_at = new Date();
+    const result = await db
+      .updateTable('user_stats')
+      .set(updates as any)
+      .where('user_id', '=', userId)
+      .returningAll()
+      .executeTakeFirst();
+    return result ? (result as unknown as UserStats) : null;
   }
 
   static async delete(id: number): Promise<boolean> {
-    const result = await query(`DELETE FROM users WHERE id = $1`, [id]);
-    return (result.rowCount ?? 0) > 0;
+    const [result] = await db.deleteFrom('users').where('id', '=', id).execute();
+    return (result?.numDeletedRows ?? 0n) > 0n;
   }
 }

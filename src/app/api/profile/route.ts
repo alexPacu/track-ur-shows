@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as v from 'valibot';
 import { extractUserFromRequest } from '@/server/middlewares/auth.middleware';
 import { UserRepository } from '@/server/repositories/user.repo';
-import { query, queryOne } from '@/lib/db';
+import { ProfilePutSchema } from '@/server/validators/profile.validator';
+import { db } from '@/lib/db';
+import { sql } from 'kysely';
 
 async function ensureColumns() {
-  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS background_image_url TEXT`);
-  await query(`ALTER TABLE shows ADD COLUMN IF NOT EXISTS total_episodes INTEGER`);
-  await query(`
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS background_image_url TEXT`.execute(db);
+  await sql`ALTER TABLE shows ADD COLUMN IF NOT EXISTS total_episodes INTEGER`.execute(db);
+  await sql`
     DO $$
     BEGIN
       IF EXISTS (
@@ -17,7 +20,7 @@ async function ensureColumns() {
         ALTER TABLE users ALTER COLUMN profile_picture_url TYPE TEXT;
       END IF;
     END $$
-  `);
+  `.execute(db);
 }
 
 export async function GET(req: NextRequest) {
@@ -31,7 +34,7 @@ export async function GET(req: NextRequest) {
     if (!profile) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     const [stats, hoursRow] = await Promise.all([
-      queryOne<{
+      sql<{
         total: string;
         watching: string;
         completed: string;
@@ -39,8 +42,8 @@ export async function GET(req: NextRequest) {
         movies: string;
         tv_shows: string;
         avg_personal_rating: string | null;
-      }>(
-        `SELECT
+      }>`
+        SELECT
           COUNT(*) AS total,
           COUNT(*) FILTER (WHERE ul.status = 'watching') AS watching,
           COUNT(*) FILTER (WHERE ul.status = 'completed') AS completed,
@@ -50,27 +53,25 @@ export async function GET(req: NextRequest) {
           ROUND(AVG(ul.personal_rating) FILTER (WHERE ul.personal_rating IS NOT NULL), 1) AS avg_personal_rating
          FROM user_library ul
          JOIN shows s ON s.id = ul.show_id
-         WHERE ul.user_id = $1`,
-        [user.userId]
-      ),
-      queryOne<{ total_minutes: string }>(
-        `SELECT COALESCE(SUM(
-           CASE
-             WHEN s.media_type = 'movie' THEN COALESCE(s.runtime, 0)
-             WHEN s.media_type = 'tv' THEN
-               COALESCE(s.runtime, 45) * COALESCE(
-                 s.total_episodes,
-                 (SELECT SUM(se.episode_count) FROM seasons se WHERE se.show_id = s.id),
-                 0
-               )
-             ELSE 0
-           END
-         ), 0) AS total_minutes
+         WHERE ul.user_id = ${user.userId}
+      `.execute(db).then((r) => r.rows[0] ?? null),
+      sql<{ total_minutes: string }>`
+        SELECT COALESCE(SUM(
+          CASE
+            WHEN s.media_type = 'movie' THEN COALESCE(s.runtime, 0)
+            WHEN s.media_type = 'tv' THEN
+              COALESCE(s.runtime, 45) * COALESCE(
+                s.total_episodes,
+                (SELECT SUM(se.episode_count) FROM seasons se WHERE se.show_id = s.id),
+                0
+              )
+            ELSE 0
+          END
+        ), 0) AS total_minutes
          FROM user_library ul
          JOIN shows s ON s.id = ul.show_id
-         WHERE ul.user_id = $1 AND ul.status = 'completed'`,
-        [user.userId]
-      ),
+         WHERE ul.user_id = ${user.userId} AND ul.status = 'completed'
+      `.execute(db).then((r) => r.rows[0] ?? null),
     ]);
 
     return NextResponse.json({
@@ -109,15 +110,11 @@ export async function PUT(req: NextRequest) {
 
     await ensureColumns();
 
-    const body = await req.json();
-    const { profile_picture_url, background_image_url } = body;
-
-    if (profile_picture_url && profile_picture_url.length > 3_000_000) {
-      return NextResponse.json({ error: 'Profile picture too large (max ~2 MB)' }, { status: 400 });
+    const parsed = v.safeParse(ProfilePutSchema, await req.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.issues[0].message }, { status: 400 });
     }
-    if (background_image_url && background_image_url.length > 6_000_000) {
-      return NextResponse.json({ error: 'Background image too large (max ~4 MB)' }, { status: 400 });
-    }
+    const { profile_picture_url, background_image_url } = parsed.output;
 
     await UserRepository.update(user.userId, {
       ...(profile_picture_url !== undefined ? { profile_picture_url } : {}),

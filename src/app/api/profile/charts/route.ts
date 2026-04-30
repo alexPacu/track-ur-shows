@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractUserFromRequest } from '@/server/middlewares/auth.middleware';
-import { queryMany } from '@/lib/db';
+import { db } from '@/lib/db';
+import { sql } from 'kysely';
 
 export async function GET(req: NextRequest) {
   try {
@@ -8,85 +9,83 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const [genreRows, providerRows, activityRows, statusRows, favoriteRows, ratingRows, heatmapRows] = await Promise.all([
-      queryMany<{ genre_id: string; count: string }>(
-        `SELECT genre_id, COUNT(*) as count
+      sql<{ genre_id: string; count: string }>`
+        SELECT genre_id, COUNT(*) as count
          FROM user_library ul
          JOIN shows s ON s.id = ul.show_id
          CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(s.genres, '[]'::jsonb)) AS genre_id
-         WHERE ul.user_id = $1
+         WHERE ul.user_id = ${user.userId}
          GROUP BY genre_id
          ORDER BY count DESC
-         LIMIT 10`,
-        [user.userId]
-      ),
-      queryMany<{ name: string; logo_path: string | null; count: string }>(
-        `SELECT wp.name, wp.logo_path, COUNT(DISTINCT ul.show_id) as count
-         FROM user_library ul
-         JOIN show_watch_providers swp ON swp.show_id = ul.show_id
-         JOIN watch_providers wp ON wp.id = swp.provider_id
-         WHERE ul.user_id = $1
-         GROUP BY wp.name, wp.logo_path
-         ORDER BY count DESC
-         LIMIT 10`,
-        [user.userId]
-      ),
-      queryMany<{
-        tmdb_id: number;
-        title: string;
-        media_type: string;
-        poster_path: string | null;
-        status: string;
-        personal_rating: number | null;
-        updated_at: string;
-      }>(
-        `SELECT s.tmdb_id, s.title, s.media_type, s.poster_path, ul.status, ul.personal_rating, ul.updated_at
-         FROM user_library ul
-         JOIN shows s ON s.id = ul.show_id
-         WHERE ul.user_id = $1
-         ORDER BY ul.updated_at DESC
-         LIMIT 20`,
-        [user.userId]
-      ),
-      queryMany<{ status: string; count: string }>(
-        `SELECT ul.status, COUNT(*) as count
-         FROM user_library ul
-         WHERE ul.user_id = $1
-         GROUP BY ul.status
-         ORDER BY count DESC`,
-        [user.userId]
-      ),
-      queryMany<{
-        tmdb_id: number;
-        title: string;
-        media_type: string;
-        poster_path: string | null;
-        status: string;
-        personal_rating: number | null;
-      }>(
-        `SELECT s.tmdb_id, s.title, s.media_type, s.poster_path, ul.status, ul.personal_rating
-         FROM user_library ul
-         JOIN shows s ON s.id = ul.show_id
-         WHERE ul.user_id = $1 AND ul.is_favorite = true
-         ORDER BY ul.updated_at DESC
-         LIMIT 20`,
-        [user.userId]
-      ),
-      queryMany<{ rating: string; count: string }>(
-        `SELECT ROUND(personal_rating)::int AS rating, COUNT(*) AS count
+         LIMIT 10
+      `.execute(db).then((r) => r.rows),
+      db
+        .selectFrom('user_library as ul')
+        .innerJoin('show_watch_providers as swp', 'swp.show_id', 'ul.show_id')
+        .innerJoin('watch_providers as wp', 'wp.id', 'swp.provider_id')
+        .select([
+          'wp.name',
+          'wp.logo_path',
+          sql<string>`COUNT(DISTINCT ul.show_id)`.as('count'),
+        ])
+        .where('ul.user_id', '=', user.userId)
+        .groupBy(['wp.name', 'wp.logo_path'])
+        .orderBy(sql`count DESC`)
+        .limit(10)
+        .execute(),
+      db
+        .selectFrom('user_library as ul')
+        .innerJoin('shows as s', 's.id', 'ul.show_id')
+        .select([
+          's.tmdb_id',
+          's.title',
+          's.media_type',
+          's.poster_path',
+          'ul.status',
+          'ul.personal_rating',
+          'ul.updated_at',
+        ])
+        .where('ul.user_id', '=', user.userId)
+        .orderBy('ul.updated_at', 'desc')
+        .limit(20)
+        .execute(),
+      db
+        .selectFrom('user_library')
+        .select(['status', sql<string>`COUNT(*)`.as('count')])
+        .where('user_id', '=', user.userId)
+        .groupBy('status')
+        .orderBy(sql`count DESC`)
+        .execute(),
+      db
+        .selectFrom('user_library as ul')
+        .innerJoin('shows as s', 's.id', 'ul.show_id')
+        .select([
+          's.tmdb_id',
+          's.title',
+          's.media_type',
+          's.poster_path',
+          'ul.status',
+          'ul.personal_rating',
+        ])
+        .where('ul.user_id', '=', user.userId)
+        .where('ul.is_favorite', '=', true)
+        .orderBy('ul.updated_at', 'desc')
+        .limit(20)
+        .execute(),
+      sql<{ rating: string; count: string }>`
+        SELECT ROUND(personal_rating)::int AS rating, COUNT(*) AS count
          FROM user_library
-         WHERE user_id = $1 AND personal_rating IS NOT NULL AND personal_rating > 0
+         WHERE user_id = ${user.userId} AND personal_rating IS NOT NULL AND personal_rating > 0
          GROUP BY ROUND(personal_rating)::int
-         ORDER BY rating`,
-        [user.userId]
-      ),
-      queryMany<{ day: string; count: string }>(
-        `SELECT DATE(created_at)::text AS day, COUNT(*) AS count
+         ORDER BY rating
+      `.execute(db).then((r) => r.rows),
+      sql<{ day: string; count: string }>`
+        SELECT DATE(created_at)::text AS day, COUNT(*) AS count
          FROM activity_log
-         WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '365 days'
+         WHERE user_id = ${user.userId} AND created_at >= NOW() - INTERVAL '365 days'
          GROUP BY DATE(created_at)
-         ORDER BY day`,
-        [user.userId]
-      ),
+         ORDER BY day
+      `.execute(db).then((r) => r.rows),
     ]);
 
     return NextResponse.json({
