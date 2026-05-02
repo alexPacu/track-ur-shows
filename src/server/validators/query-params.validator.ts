@@ -55,6 +55,20 @@ export const TopRatedQuerySchema = v.object({
   type: MediaTypeQuerySchema,
 });
 
+export const UserSearchSchema = v.object({
+  q: v.pipe(
+    v.string(),
+    v.transform((s) => s.trim()),
+    v.nonEmpty('Search query is required')
+  ),
+});
+
+export const UsernamePathSchema = v.pipe(
+  v.string(),
+  v.nonEmpty('Username is required'),
+  v.regex(/^[a-zA-Z0-9_-]+$/, 'Invalid username')
+);
+
 export const SeasonPathSchema = v.object({
   id: IdPathSchema,
   seasonNumber: v.pipe(

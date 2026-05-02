@@ -59,6 +59,7 @@ interface ShowsTable {
   poster_path: string | null;
   backdrop_path: string | null;
   runtime: number | null;
+  total_episodes: number | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }
@@ -212,6 +213,14 @@ interface AiRecommendationsTable {
 interface ActivityLogTable {
   id: Generated<number>;
   user_id: number;
+  action: string;
+  tmdb_id: number;
+  created_at: Generated<Date>;
+}
+
+interface FollowsTable {
+  follower_id: number;
+  followed_id: number;
   created_at: Generated<Date>;
 }
 
@@ -236,4 +245,5 @@ export interface Database {
   user_preferences: UserPreferencesTable;
   ai_recommendations: AiRecommendationsTable;
   activity_log: ActivityLogTable;
+  follows: FollowsTable;
 }

@@ -123,7 +123,7 @@ function ScrollRow({ children }: { children: React.ReactNode }) {
     <div className="relative group/scroll">
       <button
         onClick={() => scroll('left')}
-        className="absolute left-0 top-0 bottom-0 z-10 w-16 flex items-center justify-start pl-2 bg-gradient-to-r from-bg-dark to-transparent opacity-0 group-hover/scroll:opacity-100 transition-opacity"
+        className="absolute left-0 top-0 bottom-0 z-20 w-16 flex items-center justify-start pl-2 bg-gradient-to-r from-bg-dark to-transparent opacity-0 group-hover/scroll:opacity-100 transition-opacity"
       >
         <span className="w-10 h-10 rounded-full bg-bg-card border border-accent-blue/40 flex items-center justify-center text-accent-blue text-2xl font-bold shadow-lg">
           ‹
@@ -140,7 +140,7 @@ function ScrollRow({ children }: { children: React.ReactNode }) {
 
       <button
         onClick={() => scroll('right')}
-        className="absolute right-0 top-0 bottom-0 z-10 w-16 flex items-center justify-end pr-2 bg-gradient-to-l from-bg-dark to-transparent opacity-0 group-hover/scroll:opacity-100 transition-opacity"
+        className="absolute right-0 top-0 bottom-0 z-20 w-16 flex items-center justify-end pr-2 bg-gradient-to-l from-bg-dark to-transparent opacity-0 group-hover/scroll:opacity-100 transition-opacity"
       >
         <span className="w-10 h-10 rounded-full bg-bg-card border border-accent-blue/40 flex items-center justify-center text-accent-blue text-2xl font-bold shadow-lg">
           ›
