@@ -23,9 +23,10 @@ export async function GET(
 
     const viewer = extractUserFromRequest(req);
 
-    const [counts, isFollowing] = await Promise.all([
+    const [counts, isFollowing, followsYou] = await Promise.all([
       FollowsRepository.getFollowCounts(profile.id),
       viewer ? FollowsRepository.isFollowing(viewer.userId, profile.id) : Promise.resolve(false),
+      viewer ? FollowsRepository.isFollowing(profile.id, viewer.userId) : Promise.resolve(false),
     ]);
 
     return NextResponse.json({
@@ -39,6 +40,7 @@ export async function GET(
       },
       counts,
       isFollowing,
+      followsYou,
     });
   } catch (error) {
     return NextResponse.json(

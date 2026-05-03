@@ -38,23 +38,27 @@ export class FollowsRepository {
     return result !== undefined;
   }
 
-  static async getFollowing(userId: number): Promise<FollowUser[]> {
+  static async getFollowing(userId: number, opts: { limit: number; offset: number }): Promise<FollowUser[]> {
     return db
       .selectFrom('follows')
       .innerJoin('users', 'users.id', 'follows.followed_id')
       .select(['users.id', 'users.username', 'users.profile_picture_url'])
       .where('follows.follower_id', '=', userId)
       .orderBy('follows.created_at', 'desc')
+      .limit(opts.limit)
+      .offset(opts.offset)
       .execute();
   }
 
-  static async getFollowers(userId: number): Promise<FollowUser[]> {
+  static async getFollowers(userId: number, opts: { limit: number; offset: number }): Promise<FollowUser[]> {
     return db
       .selectFrom('follows')
       .innerJoin('users', 'users.id', 'follows.follower_id')
       .select(['users.id', 'users.username', 'users.profile_picture_url'])
       .where('follows.followed_id', '=', userId)
       .orderBy('follows.created_at', 'desc')
+      .limit(opts.limit)
+      .offset(opts.offset)
       .execute();
   }
 

@@ -31,6 +31,13 @@ interface ProfileResponse {
   user: PublicProfile;
   counts: { followers: number; following: number };
   isFollowing: boolean;
+  followsYou: boolean;
+}
+
+interface FollowUser {
+  id: number;
+  username: string;
+  profile_picture_url: string | null;
 }
 
 export default function PublicProfilePage() {
@@ -38,6 +45,7 @@ export default function PublicProfilePage() {
   const [user, setUser] = useState<PublicProfile | null>(null);
   const [counts, setCounts] = useState<{ followers: number; following: number }>({ followers: 0, following: 0 });
   const [isFollowing, setIsFollowing] = useState(false);
+  const [followsYou, setFollowsYou] = useState(false);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [charts, setCharts] = useState<ChartsData | null>(null);
   const [viewerId, setViewerId] = useState<number | null>(null);
@@ -46,6 +54,11 @@ export default function PublicProfilePage() {
   const [followLoading, setFollowLoading] = useState(false);
   const [chartTab, setChartTab] = useState<ChartTab>('genres');
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [listModal, setListModal] = useState<'followers' | 'following' | null>(null);
+  const [modalUsers, setModalUsers] = useState<FollowUser[]>([]);
+  const [modalPage, setModalPage] = useState(1);
+  const [modalHasMore, setModalHasMore] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -66,6 +79,7 @@ export default function PublicProfilePage() {
       setUser(profileJson.user);
       setCounts(profileJson.counts);
       setIsFollowing(profileJson.isFollowing);
+      setFollowsYou(profileJson.followsYou);
 
       if (statsRes.ok) {
         const j = await statsRes.json();
@@ -97,6 +111,42 @@ export default function PublicProfilePage() {
       }
     } finally {
       setFollowLoading(false);
+    }
+  };
+
+  const openList = async (kind: 'followers' | 'following') => {
+    if (!user) return;
+    setListModal(kind);
+    setModalUsers([]);
+    setModalPage(1);
+    setModalHasMore(false);
+    setModalLoading(true);
+    try {
+      const res = await fetch(`/api/users/${user.username}/${kind}?page=1`, { credentials: 'include' });
+      if (res.ok) {
+        const j = await res.json();
+        setModalUsers(j[kind]);
+        setModalHasMore(j.hasMore);
+      }
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const loadMoreModal = async () => {
+    if (!user || !listModal) return;
+    setModalLoading(true);
+    try {
+      const next = modalPage + 1;
+      const res = await fetch(`/api/users/${user.username}/${listModal}?page=${next}`, { credentials: 'include' });
+      if (res.ok) {
+        const j = await res.json();
+        setModalUsers((prev) => [...prev, ...j[listModal]]);
+        setModalHasMore(j.hasMore);
+        setModalPage(next);
+      }
+    } finally {
+      setModalLoading(false);
     }
   };
 
@@ -188,7 +238,14 @@ export default function PublicProfilePage() {
             </div>
 
             <div className="pb-2">
-              <h1 className="text-4xl font-bold text-text-primary tracking-tight">{user.username}</h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-4xl font-bold text-text-primary tracking-tight">{user.username}</h1>
+                {followsYou && !isOwnProfile && (
+                  <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-white/10 text-text-muted border border-white/10">
+                    Follows you
+                  </span>
+                )}
+              </div>
               <p className="text-text-muted text-sm mt-1.5">Member since {memberYear}</p>
             </div>
           </div>
@@ -209,15 +266,23 @@ export default function PublicProfilePage() {
         </div>
 
         <div className="flex items-center gap-6 mb-6">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-text-primary">{counts.followers}</p>
+          <button
+            onClick={() => openList('followers')}
+            disabled={counts.followers === 0}
+            className="text-center group/c disabled:cursor-default disabled:opacity-100 enabled:hover:opacity-90 transition-opacity"
+          >
+            <p className="text-2xl font-bold text-text-primary group-enabled/c:group-hover/c:text-accent-blue transition-colors">{counts.followers}</p>
             <p className="text-text-muted text-xs uppercase tracking-widest font-semibold">Followers</p>
-          </div>
+          </button>
           <div className="w-px h-8 bg-white/10" />
-          <div className="text-center">
-            <p className="text-2xl font-bold text-text-primary">{counts.following}</p>
+          <button
+            onClick={() => openList('following')}
+            disabled={counts.following === 0}
+            className="text-center group/c disabled:cursor-default disabled:opacity-100 enabled:hover:opacity-90 transition-opacity"
+          >
+            <p className="text-2xl font-bold text-text-primary group-enabled/c:group-hover/c:text-accent-blue transition-colors">{counts.following}</p>
             <p className="text-text-muted text-xs uppercase tracking-widest font-semibold">Following</p>
-          </div>
+          </button>
         </div>
 
         {total > 0 && stats && (
@@ -384,6 +449,75 @@ export default function PublicProfilePage() {
           </div>
         )}
       </div>
+
+      {listModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setListModal(null)}
+        >
+          <div
+            className="modern-panel rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+              <p className="text-text-primary font-semibold tracking-tight capitalize">
+                {listModal} · {listModal === 'followers' ? counts.followers : counts.following}
+              </p>
+              <button
+                onClick={() => setListModal(null)}
+                className="text-text-muted hover:text-text-primary transition-colors text-xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="overflow-y-auto px-6 py-4">
+              {modalUsers.length === 0 && !modalLoading && (
+                <p className="text-text-muted text-sm py-4 text-center">No users to show.</p>
+              )}
+              <div className="space-y-2">
+                {modalUsers.map((u) => (
+                  <Link
+                    key={u.id}
+                    href={`/u/${u.username}`}
+                    onClick={() => setListModal(null)}
+                    className="flex items-center gap-3 py-2 border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02] -mx-2 px-2 rounded transition-colors"
+                  >
+                    <div
+                      className="w-9 h-9 rounded-full overflow-hidden bg-accent-blue/20 flex items-center justify-center font-bold text-accent-blue flex-shrink-0 text-sm"
+                    >
+                      {u.profile_picture_url ? (
+                        <img src={u.profile_picture_url} alt={u.username} className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{u.username[0]?.toUpperCase()}</span>
+                      )}
+                    </div>
+                    <span className="flex-1 text-sm font-semibold text-text-primary">{u.username}</span>
+                  </Link>
+                ))}
+              </div>
+              {modalHasMore && (
+                <div className="pt-4 text-center">
+                  <button
+                    onClick={loadMoreModal}
+                    disabled={modalLoading}
+                    className="px-5 py-1.5 text-xs font-semibold bg-accent-blue/10 text-accent-blue border border-accent-blue/20 rounded-lg hover:bg-accent-blue/20 transition-colors disabled:opacity-50"
+                  >
+                    {modalLoading ? 'Loading…' : 'Load more'}
+                  </button>
+                </div>
+              )}
+              {modalLoading && modalUsers.length === 0 && (
+                <div className="space-y-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="h-10 bg-bg-card rounded animate-pulse" />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

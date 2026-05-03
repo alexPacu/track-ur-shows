@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
         's.media_type',
       ])
       .where('al.user_id', 'in', followedIds)
+      .where('al.action', '!=', 'removed')
       .orderBy('al.created_at', 'desc')
       .limit(PAGE_SIZE + 1)
       .offset(offset)

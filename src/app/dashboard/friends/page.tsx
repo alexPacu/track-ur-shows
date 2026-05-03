@@ -82,6 +82,12 @@ export default function FriendsPage() {
   // friends
   const [following, setFollowing] = useState<FollowUser[]>([]);
   const [followers, setFollowers] = useState<FollowUser[]>([]);
+  const [followingPage, setFollowingPage] = useState(1);
+  const [followersPage, setFollowersPage] = useState(1);
+  const [followingHasMore, setFollowingHasMore] = useState(false);
+  const [followersHasMore, setFollowersHasMore] = useState(false);
+  const [followingLoadingMore, setFollowingLoadingMore] = useState(false);
+  const [followersLoadingMore, setFollowersLoadingMore] = useState(false);
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [friendsLoaded, setFriendsLoaded] = useState(false);
 
@@ -93,6 +99,9 @@ export default function FriendsPage() {
 
   useEffect(() => {
     loadFeed(1, true);
+    const onFocus = () => loadFeed(1, true);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, []);
 
   const loadFeed = async (page: number, replace = false) => {
@@ -117,14 +126,56 @@ export default function FriendsPage() {
     setFriendsLoading(true);
     try {
       const [followingRes, followersRes] = await Promise.all([
-        fetch('/api/users/me/following', { credentials: 'include' }),
-        fetch('/api/users/me/followers', { credentials: 'include' }),
+        fetch('/api/users/me/following?page=1', { credentials: 'include' }),
+        fetch('/api/users/me/followers?page=1', { credentials: 'include' }),
       ]);
-      if (followingRes.ok) setFollowing(await followingRes.json().then((r) => r.following));
-      if (followersRes.ok) setFollowers(await followersRes.json().then((r) => r.followers));
+      if (followingRes.ok) {
+        const j = await followingRes.json();
+        setFollowing(j.following);
+        setFollowingHasMore(j.hasMore);
+        setFollowingPage(1);
+      }
+      if (followersRes.ok) {
+        const j = await followersRes.json();
+        setFollowers(j.followers);
+        setFollowersHasMore(j.hasMore);
+        setFollowersPage(1);
+      }
       setFriendsLoaded(true);
     } finally {
       setFriendsLoading(false);
+    }
+  };
+
+  const loadMoreFollowing = async () => {
+    setFollowingLoadingMore(true);
+    try {
+      const next = followingPage + 1;
+      const res = await fetch(`/api/users/me/following?page=${next}`, { credentials: 'include' });
+      if (res.ok) {
+        const j = await res.json();
+        setFollowing((prev) => [...prev, ...j.following]);
+        setFollowingHasMore(j.hasMore);
+        setFollowingPage(next);
+      }
+    } finally {
+      setFollowingLoadingMore(false);
+    }
+  };
+
+  const loadMoreFollowers = async () => {
+    setFollowersLoadingMore(true);
+    try {
+      const next = followersPage + 1;
+      const res = await fetch(`/api/users/me/followers?page=${next}`, { credentials: 'include' });
+      if (res.ok) {
+        const j = await res.json();
+        setFollowers((prev) => [...prev, ...j.followers]);
+        setFollowersHasMore(j.hasMore);
+        setFollowersPage(next);
+      }
+    } finally {
+      setFollowersLoadingMore(false);
     }
   };
 
@@ -359,6 +410,17 @@ export default function FriendsPage() {
                       </button>
                     </div>
                   ))}
+                  {followingHasMore && (
+                    <div className="pt-2 text-center">
+                      <button
+                        onClick={loadMoreFollowing}
+                        disabled={followingLoadingMore}
+                        className="px-5 py-1.5 text-xs font-semibold bg-accent-blue/10 text-accent-blue border border-accent-blue/20 rounded-lg hover:bg-accent-blue/20 transition-colors disabled:opacity-50"
+                      >
+                        {followingLoadingMore ? 'Loading…' : 'Load more'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -392,6 +454,17 @@ export default function FriendsPage() {
                       </Link>
                     </div>
                   ))}
+                  {followersHasMore && (
+                    <div className="pt-2 text-center">
+                      <button
+                        onClick={loadMoreFollowers}
+                        disabled={followersLoadingMore}
+                        className="px-5 py-1.5 text-xs font-semibold bg-accent-blue/10 text-accent-blue border border-accent-blue/20 rounded-lg hover:bg-accent-blue/20 transition-colors disabled:opacity-50"
+                      >
+                        {followersLoadingMore ? 'Loading…' : 'Load more'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
