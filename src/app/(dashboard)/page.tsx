@@ -14,6 +14,7 @@ interface MediaItem {
   overview?: string;
   release_date?: string;
   first_air_date?: string;
+  reason?: string;
 }
 
 interface ContinueWatchingItem {
@@ -28,6 +29,16 @@ interface ContinueWatchingItem {
   poster_path: string | null;
   backdrop_path: string | null;
   last_watched_at: string;
+}
+
+interface RecommendedItem extends MediaItem {
+  reason?: string;
+}
+
+interface RecommendationsPayload {
+  movies: RecommendedItem[];
+  tv: RecommendedItem[];
+  genresUsed: number[];
 }
 
 function buildTmdbImage(path: string | null, size: string = 'w780') {
@@ -332,6 +343,12 @@ export default function HomePage() {
   const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<ContinueWatchingItem | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [recommendations, setRecommendations] = useState<RecommendationsPayload>({
+    movies: [],
+    tv: [],
+    genresUsed: [],
+  });
+  const [recommendationTab, setRecommendationTab] = useState<'movie' | 'tv'>('movie');
 
   const [trendingTab, setTrendingTab] = useState<'movie' | 'tv'>('movie');
   const [top10Tab, setTop10Tab] = useState<'movie' | 'tv'>('movie');
@@ -350,17 +367,28 @@ export default function HomePage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [tmRes, tsRes, trRes, cwRes] = await Promise.all([
+        const [tmRes, tsRes, trRes, cwRes, recRes] = await Promise.all([
           fetch('/api/movies/trending?timeWindow=day&type=movie'),
           fetch('/api/movies/trending?timeWindow=day&type=tv'),
           fetch('/api/movies/top-rated'),
           fetch('/api/watch-progress', { credentials: 'include' }),
+          fetch('/api/recommendations', { credentials: 'include' }),
         ]);
 
         if (tmRes.ok) setTrendingMovies((await tmRes.json()).data?.results ?? []);
         if (tsRes.ok) setTrendingShows((await tsRes.json()).data?.results ?? []);
         if (trRes.ok) setTopRatedMovies((await trRes.json()).data?.results ?? []);
         if (cwRes.ok) setContinueWatching((await cwRes.json()).data ?? []);
+        if (recRes.ok) {
+          const recJson = await recRes.json();
+          if (recJson.success) {
+            const payload: RecommendationsPayload = recJson.data ?? { movies: [], tv: [], genresUsed: [] };
+            setRecommendations(payload);
+            if (payload.movies.length === 0 && payload.tv.length > 0) {
+              setRecommendationTab('tv');
+            }
+          }
+        }
       } catch (e) {
         console.error('Dashboard fetch error:', e);
       } finally {
@@ -491,6 +519,10 @@ export default function HomePage() {
   const topRatedItems = topRatedTab === 'movie' ? topRatedMovies : topRatedShows;
   const genreItems = genreCache[genreTab] ?? [];
   const providerItems = providerCache[providerTab] ?? [];
+  const recommendedItems = recommendationTab === 'movie' ? recommendations.movies : recommendations.tv;
+  const recommendationTabs =
+    recommendations.movies.length > 0 && recommendations.tv.length > 0 ? MEDIA_TABS : undefined;
+  const hasRecommendations = recommendations.movies.length > 0 || recommendations.tv.length > 0;
 
   const genreTabs = GENRES.map((g) => ({ id: g.id, label: g.name }));
   const providerTabs = PROVIDERS.map((p) => ({ id: p.id, label: p.name }));
@@ -601,6 +633,42 @@ export default function HomePage() {
             </ScrollRow>
           </section>
         ) : null}
+
+        {loading ? (
+          <section className="mb-14">
+            <div className="h-7 w-56 bg-bg-card animate-pulse rounded mb-7" />
+            <BackdropSkeletons />
+          </section>
+        ) : (
+          <section className="mb-14">
+            <SectionHeader
+              title="Recommended for You"
+              tabs={recommendationTabs}
+              activeTab={recommendationTab}
+              onTabChange={(id) => setRecommendationTab(id as 'movie' | 'tv')}
+            />
+            {hasRecommendations ? (
+              recommendedItems.length > 0 ? (
+                <ScrollRow>
+                  {recommendedItems.map((item) => (
+                    <div key={`${item.id}-${recommendationTab}`} className="flex-shrink-0 w-[300px]">
+                      <BackdropCard item={item} type={recommendationTab} />
+                      {item.reason && (
+                        <p className="mt-2 text-xs text-text-muted truncate">{item.reason}</p>
+                      )}
+                    </div>
+                  ))}
+                </ScrollRow>
+              ) : (
+                <p className="text-text-muted">No recommendations available for this category.</p>
+              )
+            ) : (
+              <p className="text-text-muted">
+                No recommendations yet. Add more titles to your watchlist.
+              </p>
+            )}
+          </section>
+        )}
 
         <section className="mb-14">
           <div className="flex items-end justify-between mb-7">

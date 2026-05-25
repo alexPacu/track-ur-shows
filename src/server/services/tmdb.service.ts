@@ -295,4 +295,50 @@ export class TMDBService {
       throw error;
     }
   }
+
+  static async getMovieRecommendations(movieId: number, options: { page?: number } = {}) {
+    try {
+      const raw = (await this.client.getMovieRecommendations(movieId, {
+        page: options.page || 1,
+      })) as any;
+
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'getMovieRecommendations');
+
+      return {
+        ...raw,
+        results: raw.results.map((item: any) => ({
+          ...item,
+          media_type: 'movie',
+          poster_url: buildImageUrl(item.poster_path, 'w342'),
+          backdrop_url: buildImageUrl(item.backdrop_path, 'w780'),
+        })),
+      };
+    } catch (error) {
+      console.error('TMDBService.getMovieRecommendations error:', error);
+      throw error;
+    }
+  }
+
+  static async getTVRecommendations(seriesId: number, options: { page?: number } = {}) {
+    try {
+      const raw = (await this.client.getTVRecommendations(seriesId, {
+        page: options.page || 1,
+      })) as any;
+
+      warnIfInvalid(v.safeParse(TMDBListResponseSchema, raw), 'getTVRecommendations');
+
+      return {
+        ...raw,
+        results: raw.results.map((item: any) => ({
+          ...item,
+          media_type: 'tv',
+          poster_url: buildImageUrl(item.poster_path, 'w342'),
+          backdrop_url: buildImageUrl(item.backdrop_path, 'w780'),
+        })),
+      };
+    } catch (error) {
+      console.error('TMDBService.getTVRecommendations error:', error);
+      throw error;
+    }
+  }
 }

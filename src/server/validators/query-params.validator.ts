@@ -8,6 +8,14 @@ export const PageSchema = v.pipe(
   v.maxValue(500, 'Page must be between 1 and 500')
 );
 
+export const LimitSchema = v.pipe(
+  v.optional(v.string(), '20'),
+  v.transform((s) => parseInt(s, 10)),
+  v.integer(),
+  v.minValue(1, 'Limit must be between 1 and 50'),
+  v.maxValue(50, 'Limit must be between 1 and 50')
+);
+
 export const MediaTypeQuerySchema = v.optional(
   v.picklist(['movie', 'tv'] as const, 'type must be "movie" or "tv"'),
   'movie' as const
@@ -49,6 +57,11 @@ export const DiscoverQuerySchema = v.object({
   with_genres:          v.optional(v.string()),
   with_watch_providers: v.optional(v.string()),
   page:                 PageSchema,
+});
+
+export const RecommendationsQuerySchema = v.object({
+  type: v.optional(v.picklist(['movie', 'tv'] as const, 'type must be "movie" or "tv"')),
+  limit: LimitSchema,
 });
 
 export const TopRatedQuerySchema = v.object({
