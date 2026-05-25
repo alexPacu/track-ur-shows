@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { SearchIcon, BookmarkIcon, UserIcon, StarIcon } from './Icons';
+import { SearchIcon, BookmarkIcon, UserIcon, StarIcon, UsersIcon } from './Icons';
 
 const GENRES: Record<number, string> = {
   28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy', 80: 'Crime',
@@ -298,6 +298,17 @@ export function Navbar() {
           >
             <BookmarkIcon className="h-4 w-4" />
             <span>Watchlist</span>
+          </Link>
+          <Link
+            href="/dashboard/friends"
+            className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all ${
+              isActive('/dashboard/friends')
+                ? 'text-accent-blue bg-accent-blue/10 border border-accent-blue/20'
+                : 'text-text-muted hover:text-text-primary hover:bg-white/[0.04] border border-transparent'
+            }`}
+          >
+            <UsersIcon className="h-4 w-4" />
+            <span>Friends</span>
           </Link>
           <Link
             href="/dashboard/profile"

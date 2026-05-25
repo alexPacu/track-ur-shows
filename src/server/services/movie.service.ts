@@ -13,7 +13,7 @@ export class MovieService {
       });
 
       // cache results in database
-      const cachedShows = await Promise.all(
+      await Promise.all(
         results.results
           .slice(0, 5)
           .map((movie: any) =>
@@ -50,7 +50,7 @@ export class MovieService {
         type: 'tv',
       });
 
-      const cachedShows = await Promise.all(
+      await Promise.all(
         results.results
           .slice(0, 5)
           .map((show: any) =>

@@ -5,8 +5,8 @@ export interface User {
   email: string;
   username: string;
   password_hash: string;
-  profile_picture_url?: string;
-  background_image_url?: string;
+  profile_picture_url?: string | null;
+  background_image_url?: string | null;
   created_at: Date;
   updated_at: Date;
 }

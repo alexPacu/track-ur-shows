@@ -8,6 +8,14 @@ export const PageSchema = v.pipe(
   v.maxValue(500, 'Page must be between 1 and 500')
 );
 
+export const LimitSchema = v.pipe(
+  v.optional(v.string(), '20'),
+  v.transform((s) => parseInt(s, 10)),
+  v.integer(),
+  v.minValue(1, 'Limit must be between 1 and 50'),
+  v.maxValue(50, 'Limit must be between 1 and 50')
+);
+
 export const MediaTypeQuerySchema = v.optional(
   v.picklist(['movie', 'tv'] as const, 'type must be "movie" or "tv"'),
   'movie' as const
@@ -51,9 +59,28 @@ export const DiscoverQuerySchema = v.object({
   page:                 PageSchema,
 });
 
+export const RecommendationsQuerySchema = v.object({
+  type: v.optional(v.picklist(['movie', 'tv'] as const, 'type must be "movie" or "tv"')),
+  limit: LimitSchema,
+});
+
 export const TopRatedQuerySchema = v.object({
   type: MediaTypeQuerySchema,
 });
+
+export const UserSearchSchema = v.object({
+  q: v.pipe(
+    v.string(),
+    v.transform((s) => s.trim()),
+    v.nonEmpty('Search query is required')
+  ),
+});
+
+export const UsernamePathSchema = v.pipe(
+  v.string(),
+  v.nonEmpty('Username is required'),
+  v.regex(/^[a-zA-Z0-9_-]+$/, 'Invalid username')
+);
 
 export const SeasonPathSchema = v.object({
   id: IdPathSchema,

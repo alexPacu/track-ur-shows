@@ -23,6 +23,26 @@ export class WatchlistService {
     },
     status: string = 'planning_to_watch'
   ): Promise<UserLibraryEntry> {
+    let runtime = showData.runtime;
+    let totalEpisodes: number | undefined;
+
+    // nincs runtime adat soooo apit hivjad
+    if (runtime == null || mediaType === 'tv') {
+      try {
+        if (mediaType === 'movie') {
+          const details = await TMDBService.getMovieDetails(tmdbId);
+          runtime = runtime ?? (details as any).runtime ?? undefined;
+        } else {
+          const details = await TMDBService.getTVShowDetails(tmdbId);
+          const ert = (details as any).episode_run_time;
+          if (runtime == null) runtime = Array.isArray(ert) && ert.length > 0 ? ert[0] : undefined;
+          totalEpisodes = (details as any).number_of_episodes ?? undefined;
+        }
+      } catch {
+        // nincs runtime
+      }
+    }
+
     const show = await ShowRepository.findOrCreateByTmdbId(tmdbId, {
       title: showData.title,
       description: showData.description,
@@ -32,7 +52,8 @@ export class WatchlistService {
       release_date: showData.releaseDate ? new Date(showData.releaseDate) : undefined,
       poster_path: showData.posterPath,
       backdrop_path: showData.backdropPath,
-      runtime: showData.runtime,
+      runtime,
+      total_episodes: totalEpisodes,
     });
 
     return WatchlistRepository.add(userId, show.id, status);

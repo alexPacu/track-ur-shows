@@ -261,6 +261,26 @@ class TMDBClient {
     });
   }
 
+  async getMovieRecommendations(
+    movieId: number,
+    options: { page?: number; language?: string } = {}
+  ): Promise<TMDBSearchResult> {
+    return this.request<TMDBSearchResult>(`/movie/${movieId}/recommendations`, {
+      page: options.page || 1,
+      language: options.language || 'en-US',
+    });
+  }
+
+  async getTVRecommendations(
+    seriesId: number,
+    options: { page?: number; language?: string } = {}
+  ): Promise<TMDBSearchResult> {
+    return this.request<TMDBSearchResult>(`/tv/${seriesId}/recommendations`, {
+      page: options.page || 1,
+      language: options.language || 'en-US',
+    });
+  }
+
   async findByExternalId(
     externalId: string,
     externalSource:

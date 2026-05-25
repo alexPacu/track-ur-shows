@@ -13,6 +13,7 @@ export interface Show {
   poster_path?: string;
   backdrop_path?: string;
   runtime?: number;
+  total_episodes?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -59,13 +60,19 @@ export class ShowRepository {
         poster_path: data.poster_path ?? null,
         backdrop_path: data.backdrop_path ?? null,
         runtime: data.runtime ?? null,
+        total_episodes: data.total_episodes ?? null,
       })
       .onConflict((oc) =>
         oc.column('tmdb_id').doUpdateSet({
           title: sql`excluded.title`,
+          description: sql`COALESCE(excluded.description, shows.description)`,
+          genres: sql`COALESCE(excluded.genres, shows.genres)`,
+          release_date: sql`COALESCE(excluded.release_date, shows.release_date)`,
           poster_path: sql`COALESCE(excluded.poster_path, shows.poster_path)`,
           backdrop_path: sql`COALESCE(excluded.backdrop_path, shows.backdrop_path)`,
           rating: sql`COALESCE(excluded.rating, shows.rating)`,
+          runtime: sql`COALESCE(excluded.runtime, shows.runtime)`,
+          total_episodes: sql`COALESCE(excluded.total_episodes, shows.total_episodes)`,
           updated_at: new Date(),
         })
       )
